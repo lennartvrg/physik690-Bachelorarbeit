@@ -7,18 +7,23 @@ class Lattice {
 public:
     Lattice(std::size_t length, double beta);
 
-    [[nodiscard]] constexpr std::size_t side_length() const noexcept;
-    [[nodiscard]] std::size_t num_sites() const noexcept;
+    [[nodiscard]] constexpr std::size_t side_length() const noexcept {
+        return length;
+    }
+
+    [[nodiscard]] constexpr std::size_t num_sites() const noexcept {
+        return length * length;
+    };
 
 
-    [[nodiscard]] double angle(std::size_t i) const noexcept;
-    void set_angle(std::size_t i, double angle) noexcept;
+    [[nodiscard]] double get(std::size_t i) const noexcept;
+    void set(std::size_t i, double angle) noexcept;
 
-    double energy() const noexcept;
-    double energy_diff(std::size_t i, double angle) const noexcept;
+    [[nodiscard]] double energy() const noexcept;
+    [[nodiscard]] double energy_diff(std::size_t i, double angle) const noexcept;
 
-    double magnetization() const noexcept;
-    double magnetization_diff(std::size_t i, double angle) const noexcept;
+    [[nodiscard]] std::tuple<double, double> magnetization() const noexcept;
+    [[nodiscard]] std::tuple<double, double> magnetization_diff(std::size_t i, double angle) const noexcept;
 
     double acceptance(double energy_diff) const noexcept;
 

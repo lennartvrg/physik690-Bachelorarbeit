@@ -3,7 +3,7 @@ project(
   'cpp',
   version : '0.1',
   meson_version : '>= 1.3.0',
-  default_options : ['warning_level=2', 'cpp_std=c++26'],
+  default_options : ['warning_level=1', 'cpp_std=c++2c'],
   subproject_dir: 'thirdparty'
 )
 
@@ -22,7 +22,10 @@ incdir = include_directories('include')
 
 exe = executable(
   'xy_model',
+  'src/utils.cpp',
   'src/lattice.cpp',
+  'src/metropolis.cpp',
+  'src/wolff.cpp',
   'src/main.cpp',
   cpp_args: '-march=native',
   include_directories: incdir,
