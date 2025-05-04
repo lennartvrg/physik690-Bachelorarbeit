@@ -1,0 +1,6 @@
+[submodule "thirdparty/SQLiteCpp"]
+	path = thirdparty/SQLiteCpp
+	url = git@github.com:SRombauts/SQLiteCpp.git
+[submodule "thirdparty/simde"]
+	path = thirdparty/simde
+	url = git@github.com:simd-everywhere/simde.git
