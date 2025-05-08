@@ -15,6 +15,10 @@ public:
         return length * length;
     };
 
+    [[nodiscard]] constexpr double get_beta() const noexcept {
+        return beta;
+    }
+
 
     [[nodiscard]] double get(std::size_t i) const noexcept;
     void set(std::size_t i, double angle) noexcept;
@@ -25,7 +29,7 @@ public:
     [[nodiscard]] std::tuple<double, double> magnetization() const noexcept;
     [[nodiscard]] std::tuple<double, double> magnetization_diff(std::size_t i, double angle) const noexcept;
 
-    double acceptance(double energy_diff) const noexcept;
+    [[nodiscard]] double acceptance(double energy_diff) const noexcept;
 
 private:
     double beta;

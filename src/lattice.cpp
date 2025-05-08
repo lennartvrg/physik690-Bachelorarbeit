@@ -6,6 +6,7 @@
 
 #include "lattice.hpp"
 #include "utils.hpp"
+#include "algorithm.hpp"
 
 Lattice::Lattice(const std::size_t length, const double beta) : beta(beta), length(length), spins(length * length) {
     assert(length * length % 4 == 0);
@@ -16,7 +17,7 @@ double Lattice::get(std::size_t i) const noexcept {
 }
 
 void Lattice::set(std::size_t i, double angle) noexcept {
-    assert(angle >= 0.0 && angle < 2.0 * std::numbers::pi && "Angle must be on [0.0, 2PI)");
+    assert(angle >= 0.0 && angle < algorithms::TWO_PI && "Angle must be on [0.0, 2PI)");
     spins[i % num_sites()] = angle;
 }
 

@@ -28,6 +28,7 @@ exe = executable(
   'src/wolff.cpp',
   'src/main.cpp',
   cpp_args: '-march=native',
+  link_args: '-ltbb',
   include_directories: incdir,
   install : true,
   dependencies : dependencies,
