@@ -12,7 +12,7 @@
  * @param rng The random number generator to use for the acceptance probability.
  * @return The total change of energy and magnetization once every lattice site is visited.
  */
-static std::tuple<double, std::tuple<double, double>> sweep(Lattice & lattice, std::mt19937 & rng) noexcept {
+std::tuple<double, std::tuple<double, double>> algorithms::metropolis(Lattice & lattice, std::mt19937 & rng) noexcept {
     // Prepares the result objects containing the total change of energy and magnetization
     double chg_energy = 0.0, chg_magnet_cos = 0.0, chg_magnet_sin = 0.0;
 
@@ -34,23 +34,4 @@ static std::tuple<double, std::tuple<double, double>> sweep(Lattice & lattice, s
     }
 
     return {chg_energy, {chg_magnet_cos, chg_magnet_sin}};
-}
-
-std::tuple<std::vector<double>, std::vector<double>> algorithms::metropolis(Lattice & lattice, const std::size_t sweeps, std::mt19937 &rng) noexcept {
-    double current_energy = lattice.energy();
-    auto [current_magnet_cos, current_magnet_sin] = lattice.magnetization();
-
-    std::vector<double> energies{}, magnets{};
-    for (std::size_t i = 0; i < sweeps; i++) {
-        const auto [chg_energy, chg_magnet] = sweep(lattice, rng);
-        current_magnet_cos += get<0>(chg_magnet);
-        current_magnet_sin += get<1>(chg_magnet);
-        current_energy += chg_energy;
-
-        energies.push_back(current_energy / static_cast<double>(lattice.num_sites()));
-        magnets.push_back(std::sqrt(current_magnet_cos * current_magnet_cos + current_magnet_sin * current_magnet_sin) /
-                          static_cast<double>(lattice.num_sites()));
-    }
-
-    return {energies, magnets};
 }

@@ -1,5 +1,7 @@
-# Created by https://www.toptal.com/developers/gitignore/api/clion+all,cmake,latex
-# Edit at https://www.toptal.com/developers/gitignore?templates=clion+all,cmake,latex
+output
+
+# Created by https://www.toptal.com/developers/gitignore/api/cmake,latex,clion+all,jupyternotebooks
+# Edit at https://www.toptal.com/developers/gitignore?templates=cmake,latex,clion+all,jupyternotebooks
 
 ### CLion+all ###
 # Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio, WebStorm and Rider
@@ -107,6 +109,20 @@ CMakeUserPresets.json
 
 # External projects
 *-prefix/
+
+### JupyterNotebooks ###
+# gitignore template for Jupyter Notebooks
+# website: http://jupyter.org/
+
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# IPython
+profile_default/
+ipython_config.py
+
+# Remove previous ipynb_checkpoints
+#   git rm -r .ipynb_checkpoints/
 
 ### LaTeX ###
 ## Core latex/pdflatex auxiliary files:
@@ -418,4 +434,4 @@ TSWLatexianTemp*
 # glossaries
 *.glstex
 
-# End of https://www.toptal.com/developers/gitignore/api/clion+all,cmake,latex
+# End of https://www.toptal.com/developers/gitignore/api/cmake,latex,clion+all,jupyternotebooks

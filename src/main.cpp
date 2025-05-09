@@ -9,6 +9,8 @@
 #include "wolff.hpp"
 #include "metropolis.hpp"
 
+static std::mutex mtx;
+
 static thread_local std::mt19937 thread_rng {std::random_device{}()};
 
 static std::vector<double> sweep_through_temperature() {
@@ -29,7 +31,7 @@ void write_output_csv(const std::span<const T> measurements, const std::string &
 
 std::tuple<double, double> simulate_size(const std::size_t size, const double temperature, std::mt19937 & rng, const algorithms::function & algorithm) {
     Lattice lattice {size, 1.0 / temperature};
-    auto [energy, magnetization] = algorithm(lattice, 40000, rng);
+    auto [energy, magnetization] = algorithms::simulate(lattice, 10000, rng, algorithm);
 
     double mean_energy = std::reduce(energy.begin(), energy.end()) / static_cast<double>(energy.size());
     double mean_magnet = std::reduce(magnetization.begin(), magnetization.end()) / static_cast<double>(magnetization.size());
@@ -42,11 +44,16 @@ int main() {
     std::vector<std::string> results {};
     results.resize(range.size());
 
-    std::transform(std::execution::par, range.begin(), range.end(), results.begin(), [] (const double temperature) {
-        std::ostringstream os;
+    std::atomic_uint64_t counter {0};
+    std::transform(std::execution::par, range.begin(), range.end(), results.begin(), [&] (const double temperature) {
         const auto [energy, magnetization] = simulate_size(64, temperature, thread_rng, algorithms::wolff);
 
+        std::lock_guard lock {mtx};
+        std::cout << "\r\t L=64 " << ++counter << "/" << 150 << " | T = " << temperature << std::flush;
+
+        std::ostringstream os;
         os << temperature << "," << energy << "," << magnetization;
+
         return os.str();
     });
 

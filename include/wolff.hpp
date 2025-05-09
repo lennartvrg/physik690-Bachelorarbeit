@@ -1,10 +1,10 @@
 #ifndef WOLFF_HPP
 #define WOLFF_HPP
 
-#include "algorithm.hpp"
+#include "algorithms.hpp"
 
 namespace algorithms {
-    std::tuple<std::vector<double>, std::vector<double>> wolff(Lattice & lattice, std::size_t sweeps, std::mt19937 & rng) noexcept;
+    std::tuple<double, std::tuple<double, double>> wolff(Lattice & lattice, std::mt19937 & rng) noexcept;
 }
 
 #endif //WOLFF_HPP

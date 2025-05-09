@@ -2,8 +2,8 @@ project(
   'xy_model',
   'cpp',
   version : '0.1',
-  meson_version : '>= 1.3.0',
-  default_options : ['warning_level=1', 'cpp_std=c++2c'],
+  meson_version : '>= 1.8.0',
+  default_options : ['warning_level=2', 'cpp_std=c++26'],
   subproject_dir: 'thirdparty'
 )
 
@@ -24,10 +24,11 @@ exe = executable(
   'xy_model',
   'src/utils.cpp',
   'src/lattice.cpp',
+  'src/algorithms.cpp',
   'src/metropolis.cpp',
   'src/wolff.cpp',
   'src/main.cpp',
-  cpp_args: '-march=native',
+  cpp_args: ['-march=native', '-fno-math-errno', '-fno-trapping-math'],
   link_args: '-ltbb',
   include_directories: incdir,
   install : true,
