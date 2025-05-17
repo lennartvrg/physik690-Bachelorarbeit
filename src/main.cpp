@@ -8,6 +8,7 @@
 #include "lattice.hpp"
 #include "wolff.hpp"
 #include "metropolis.hpp"
+#include "analysis/autocorrelation.hpp"
 
 static std::mutex mtx;
 
@@ -29,14 +30,16 @@ void write_output_csv(const std::span<const T> measurements, const std::string &
     output.close();
 }
 
-std::tuple<double, double> simulate_size(const std::size_t size, const double temperature, std::mt19937 & rng, const algorithms::function & algorithm) {
+std::tuple<double, double, double> simulate_size(const std::size_t size, const double temperature, std::mt19937 & rng, const algorithms::function & algorithm) {
     Lattice lattice {size, 1.0 / temperature};
-    auto [energy, magnetization] = algorithms::simulate(lattice, 10000, rng, algorithm);
+    auto [energy, magnetization] = algorithms::simulate(lattice, 40000, rng, algorithm);
+
+    const auto [tau, _] = analysis::integrated_autocorrelation_time(energy);
 
     double mean_energy = std::reduce(energy.begin(), energy.end()) / static_cast<double>(energy.size());
     double mean_magnet = std::reduce(magnetization.begin(), magnetization.end()) / static_cast<double>(magnetization.size());
 
-    return {mean_energy, mean_magnet};
+    return {tau, mean_energy, mean_magnet};
 }
 
 int main() {
@@ -45,18 +48,18 @@ int main() {
     results.resize(range.size());
 
     std::atomic_uint64_t counter {0};
-    std::transform(std::execution::par, range.begin(), range.end(), results.begin(), [&] (const double temperature) {
-        const auto [energy, magnetization] = simulate_size(64, temperature, thread_rng, algorithms::wolff);
+    std::transform(std::execution::par_unseq, range.begin(), range.end(), results.begin(), [&] (const double temperature) {
+        const auto [tau, energy, magnetization] = simulate_size(20, temperature, thread_rng, algorithms::wolff);
 
         std::lock_guard lock {mtx};
         std::cout << "\r\t L=64 " << ++counter << "/" << 150 << " | T = " << temperature << std::flush;
 
         std::ostringstream os;
-        os << temperature << "," << energy << "," << magnetization;
+        os << temperature << "," << tau << "," << energy << "," << magnetization;
 
         return os.str();
     });
 
     const std::span<const std::string> span = results;
-    write_output_csv(span, "wolff", "temperature,energy,magnetization");
+    write_output_csv(span, "wolff", "temperature,tau,energy,magnetization");
 }
