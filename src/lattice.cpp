@@ -9,14 +9,14 @@
 #include "algorithms.hpp"
 
 Lattice::Lattice(const std::size_t length, const double beta) : beta(beta), length(length), spins(length * length) {
-    assert(length * length % 4 == 0);
+    assert(length * length % 4 == 0 && "Lattice size must be a multiple of 4 as the SIMD instructions won't work otherwise");
 }
 
-double Lattice::get(std::size_t i) const noexcept {
+double Lattice::get(const std::size_t i) const noexcept {
     return spins[i % num_sites()];
 }
 
-void Lattice::set(std::size_t i, double angle) noexcept {
+void Lattice::set(const std::size_t i, const double angle) noexcept {
     assert(angle >= 0.0 && angle < algorithms::N_PI<2> && "Angle must be on [0.0, 2PI)");
     spins[i % num_sites()] = angle;
 }
@@ -64,7 +64,7 @@ std::tuple<double, double> Lattice::magnetization() const noexcept {
 }
 
 std::tuple<double, double> Lattice::magnetization_diff(const std::size_t i, const double angle) const noexcept {
-    const simde__m128d data = simde_mm_set_pd(angle, std::numbers::pi + get(i));
+    const simde__m128d data = simde_mm_set_pd(angle, algorithms::N_PI<1> + get(i));
 
     simde__m128d cos = simde_mm_setzero_pd();
     const simde__m128d sin = simde_mm_sincos_pd(&cos, data);

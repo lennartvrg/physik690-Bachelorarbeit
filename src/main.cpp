@@ -3,6 +3,7 @@
 #include <random>
 #include <ranges>
 #include <execution>
+#include <filesystem>
 #include <fstream>
 
 #include "lattice.hpp"
@@ -13,52 +14,51 @@
 
 static std::mutex mtx;
 
-static thread_local std::mt19937 thread_rng {std::random_device{}()};
-
 static std::vector<double> sweep_through_temperature() {
-    std::vector<double> result (150);
-    std::ranges::generate(result, [n = 0.0] mutable{ return n += 0.02; });
+    std::vector<double> result (64);
+    std::ranges::generate(result, [&, n = 0.0] mutable {
+        return n += 3.0 / static_cast<double>(result.size());
+    });
     return result;
 }
 
-template<typename T>
-void write_output_csv(const std::span<const T> measurements, const std::string & file_name, const std::string & headers) {
+void write_output_csv(const std::ostringstream & measurements, const std::string & file_name, const std::string & headers) {
+    std::filesystem::create_directories("output");
+
     std::ofstream output;
     output.open("output/" + file_name + ".csv");
 
-    output << headers << "\n";
-    std::ranges::copy(measurements, std::ostream_iterator<T>(output, "\n"));
+    output << headers << std::endl << measurements.str();
     output.close();
 }
 
-std::tuple<double, double, double> simulate_size(const std::size_t size, const double temperature, std::mt19937 & rng, const algorithms::function & algorithm) {
+std::tuple<double, double, double, double, double, double> simulate_size(const std::size_t size, const double temperature, const algorithms::function & algorithm) {
     Lattice lattice {size, 1.0 / temperature};
-    auto [energy, _1] = algorithms::simulate(lattice, 40000, rng, algorithm);
+    std::mt19937 rng {std::random_device{}()};
 
-    const auto [tau, _2] = analysis::integrated_autocorrelation_time(energy);
-    const auto [mean, stddev] = analysis::bootstrap(rng, energy, tau, 100);
+    auto [energy, magnets] = algorithms::simulate(lattice, 40000, rng, algorithm);
 
-    return {tau, mean, stddev};
+    const auto [e_tau, _1] = analysis::integrated_autocorrelation_time(energy);
+    const auto [e_mean, e_stddev] = analysis::bootstrap(rng, energy, e_tau, 100);
+
+    const auto [m_tau, _2] = analysis::integrated_autocorrelation_time(magnets);
+    const auto [m_mean, m_stddev] = analysis::bootstrap(rng, magnets, m_tau, 100);
+
+    return {e_tau, e_mean, e_stddev, m_tau, m_mean, m_stddev};
 }
 
 int main() {
+    std::ostringstream os;
     const auto range = sweep_through_temperature();
-    std::vector<std::string> results {};
-    results.resize(range.size());
 
     std::atomic_uint64_t counter {0};
-    std::transform(std::execution::par_unseq, range.begin(), range.end(), results.begin(), [&] (const double temperature) {
-        const auto [tau, energy, magnetization] = simulate_size(32, temperature, thread_rng, algorithms::wolff);
+    std::for_each(std::execution::par, range.begin(), range.end(), [&] (const double temperature) {
+        const auto [e_tau, e_mean, e_stddev, m_tau, m_mean, m_stddev] = simulate_size(512, temperature, algorithms::wolff);
 
-        std::lock_guard lock {mtx};
-        std::cout << "\r\t L=64 " << ++counter << "/" << 150 << " | T = " << temperature << std::flush;
-
-        std::ostringstream os;
-        os << temperature << "," << tau << "," << energy << "," << magnetization;
-
-        return os.str();
+        std::scoped_lock lock {mtx};
+        std::cout << "\r\t L=64 " << ++counter << "/64 | T = " << temperature << std::flush;
+        os << temperature << "," << e_tau << "," << e_mean << "," << e_stddev << "," << m_tau << "," << m_mean << "," << m_stddev << std::endl;
     });
 
-    const std::span<const std::string> span = results;
-    write_output_csv(span, "wolff", "temperature,tau,energy,energy_stddev");
+    write_output_csv(os, "wolff", "temperature,e_tau,e_mean,e_stddev,m_tau,m_mean,m_stddev");
 }
