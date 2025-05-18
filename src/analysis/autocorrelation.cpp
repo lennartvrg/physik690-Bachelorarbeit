@@ -16,8 +16,8 @@ std::vector<double> normalized_autocorrelation_function(const std::span<double> 
 
 	std::vector<std::complex<double>> in = {}, out = {};
 	for (const double x : data) {
-		in.push_back(std::complex {x - mean, 0.0});
-		out.push_back({ 0.0, 0.0 });
+		in.emplace_back(x - mean, 0.0);
+		out.emplace_back( 0.0, 0.0);
 	}
 
 	std::unique_lock lock {mtx};
