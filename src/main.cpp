@@ -36,7 +36,7 @@ std::tuple<double, double, double, double, double, double> simulate_size(const s
     Lattice lattice {size, 1.0 / temperature};
     std::mt19937 rng {std::random_device{}()};
 
-    auto [energy, magnets] = algorithms::simulate(lattice, 40000, rng, algorithm);
+    auto [energy, magnets] = algorithms::simulate(lattice, 400000, rng, algorithm);
 
     const auto [e_tau, _1] = analysis::integrated_autocorrelation_time(energy);
     const auto [e_mean, e_stddev] = analysis::bootstrap(rng, energy, e_tau, 100);
@@ -53,7 +53,7 @@ int main() {
 
     std::atomic_uint64_t counter {0};
     std::for_each(std::execution::par, range.begin(), range.end(), [&] (const double temperature) {
-        const auto [e_tau, e_mean, e_stddev, m_tau, m_mean, m_stddev] = simulate_size(512, temperature, algorithms::wolff);
+        const auto [e_tau, e_mean, e_stddev, m_tau, m_mean, m_stddev] = simulate_size(100, temperature, algorithms::wolff);
 
         std::scoped_lock lock {mtx};
         std::cout << "\r\t L=64 " << ++counter << "/64 | T = " << temperature << std::flush;

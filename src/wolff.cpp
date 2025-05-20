@@ -1,18 +1,17 @@
 #include <queue>
-#include <unordered_map>
 #include <cmath>
 #include <unordered_set>
 
 #include "wolff.hpp"
 
-std::tuple<double, std::tuple<double, double>> algorithms::wolff(Lattice &lattice, std::mt19937 &rng) noexcept {
+std::tuple<double, std::tuple<double, double>> algorithms::wolff(Lattice & lattice, std::mt19937 & rng) noexcept {
     // Prepares the result objects containing the total change of energy and magnetization
     auto chg_energy = 0.0, chg_magnet_cos = 0.0, chg_magnet_sin = 0.0;
-    std::uniform_int_distribution<std::size_t> sites{0, lattice.num_sites()};
+    std::uniform_int_distribution<std::size_t> sites {0, lattice.num_sites()};
 
     // Pick a random starting site and random reference angle
-    const std::size_t random_site = sites(rng);
-    const auto reference_angle = algorithms::ANGLE(rng);
+    const auto random_site = sites(rng);
+    const auto reference_angle = ANGLE(rng);
 
     // Keep track of visited sites and site yet to flip. Start with the random site from above.
     std::unordered_set visited { random_site };
@@ -39,22 +38,22 @@ std::tuple<double, std::tuple<double, double>> algorithms::wolff(Lattice &lattic
         chg_magnet_sin += magnet_sin_diff;
 
         // Find neighboring spins
-        const std::size_t neighbours[4] = {(i + 1) % lattice.num_sites(),
-                                           (i + lattice.num_sites() - 1) % lattice.num_sites(),
-                                           (i + lattice.side_length()) % lattice.num_sites(),
-                                           (i + lattice.num_sites() - lattice.side_length()) % lattice.num_sites()};
+        const std::size_t neighbors[4] = {(i + 1) % lattice.num_sites(),
+                                            (i + lattice.num_sites() - 1) % lattice.num_sites(),
+                                            (i + lattice.side_length()) % lattice.num_sites(),
+                                            (i + lattice.num_sites() - lattice.side_length()) % lattice.num_sites()};
 
         // Go through neighboring spins which have not yet been visited
-        for (const std::size_t j : neighbours) {
+        for (const std::size_t j : neighbors) {
             if (!visited.contains(j)) {
                 // Calculate dot product of neighbors
                 const auto prop_i= std::cos(old_angle - reference_angle);
                 const auto prop_j= std::cos(lattice.get(j) - reference_angle);
 
                 // Add spin to the cluster with P = 1 - exp{min{0.0,-2*BETA*(ox*r)*(oy*r)}} and mark as visited
-                if (const auto accept = 1.0 - std::exp(std::min(0.0, -2.0 * lattice.get_beta() * prop_i * prop_j)); accept > algorithms::ACCEPTANCE(rng)) {
-                    visited.insert(j);
-                    queue.push(j);
+                if (const auto accept = 1.0 - std::exp(std::min(0.0, -2.0 * lattice.get_beta() * prop_i * prop_j)); accept > ACCEPTANCE(rng)) {
+                    visited.emplace(j);
+                    queue.emplace(j);
                 }
             }
         }

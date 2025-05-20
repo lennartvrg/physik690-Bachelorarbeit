@@ -18,14 +18,14 @@ std::tuple<double, std::tuple<double, double>> algorithms::metropolis(Lattice & 
 
     // Go over all lattice sites and propose a new angle for the spin at the site
     for (std::size_t i = 0; i < lattice.num_sites(); i++) {
-        const auto angle = algorithms::ANGLE(rng);
+        const auto angle = ANGLE(rng);
 
         // Calculate the difference the proposed angle would make
         const auto energy_diff = lattice.energy_diff(i, angle);
         const auto [magnet_cos_diff, magnet_sin_diff] = lattice.magnetization_diff(i, angle);
 
         // Check acceptance probability min(1.0, -exp{-BETA * H}) and update lattice site / results
-        if (lattice.acceptance(energy_diff) > algorithms::ACCEPTANCE(rng)) {
+        if (lattice.acceptance(energy_diff) > ACCEPTANCE(rng)) {
             chg_energy += energy_diff;
             chg_magnet_cos += magnet_cos_diff;
             chg_magnet_sin += magnet_sin_diff;

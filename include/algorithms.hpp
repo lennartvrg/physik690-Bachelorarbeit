@@ -8,6 +8,8 @@
 #include "lattice.hpp"
 
 namespace algorithms {
+    enum Algorithm { METROPOLIS, WOLFF };
+
     template<const std::size_t N> constexpr double N_PI = N * std::numbers::pi;
 
     /**
