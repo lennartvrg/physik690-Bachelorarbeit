@@ -32,6 +32,7 @@ exe = executable(
   'src/wolff.cpp',
   'src/analysis/autocorrelation.cpp',
   'src/analysis/bootstrap.cpp',
+  'src/storage/sqlite_storage.cpp',
   'src/main.cpp',
   cpp_args: ['-march=native', '-fno-math-errno', '-fno-trapping-math'],
   link_args: '-ltbb',

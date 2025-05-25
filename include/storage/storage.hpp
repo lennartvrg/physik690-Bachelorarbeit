@@ -10,7 +10,7 @@ class Storage {
 public:
 	virtual ~Storage() = default;
 
-	virtual std::tuple<algorithms::Algorithm, std::size_t> next_configuration() = 0;
+	virtual std::optional<std::tuple<algorithms::Algorithm, std::size_t>> next_configuration() = 0;
 };
 
 #endif //STORAGE_HPP

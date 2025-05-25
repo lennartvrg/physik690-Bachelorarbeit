@@ -11,6 +11,8 @@
 #include "metropolis.hpp"
 #include "analysis/autocorrelation.hpp"
 #include "analysis/boostrap.hpp"
+#include "storage/sqlite_storage.hpp"
+#include "storage/storage.hpp"
 
 static std::mutex mtx;
 
@@ -48,6 +50,9 @@ std::tuple<double, double, double, double, double, double> simulate_size(const s
 }
 
 int main() {
+    const std::unique_ptr<Storage> storage { new SQLiteStorage() };
+    storage->next_configuration();
+
     std::ostringstream os;
     const auto range = sweep_through_temperature();
 
