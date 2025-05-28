@@ -1,16 +1,16 @@
 #ifndef STORAGE_HPP
 #define STORAGE_HPP
 
-#include <cstddef>
-#include <tuple>
-
-#include "algorithms.hpp"
+#include "config.hpp"
+#include "chunk.hpp"
 
 class Storage {
 public:
 	virtual ~Storage() = default;
 
-	virtual std::optional<std::tuple<algorithms::Algorithm, std::size_t>> next_configuration() = 0;
+	virtual void prepare_simulation(Config config) = 0;
+
+	virtual std::optional<Chunk> next_chunk(int simulation_id) = 0;
 };
 
 #endif //STORAGE_HPP

@@ -1,4 +1,4 @@
-#include "metropolis.hpp"
+#include "algorithms/metropolis.hpp"
 
 /**
  * Performs a single Metropolis-Hastings sweep over the given lattice. A single sweep visits every lattice site in order

@@ -5,19 +5,27 @@
 #include <functional>
 #include <random>
 
-#include "lattice.hpp"
+#include "../lattice.hpp"
 
 namespace algorithms {
-    enum Algorithm { METROPOLIS, WOLFF };
+    enum Algorithm { METROPOLIS = 0, WOLFF = 1 };
 
+    /**
+     * Helper constant for calculating N * PI.
+     *
+     * @tparam N The factor of PI
+     */
     template<const std::size_t N> constexpr double N_PI = N * std::numbers::pi;
 
     /**
      * The acceptance probability on the uniform distribution [0.0, 1.0).
      */
-    static thread_local std::uniform_real_distribution<double> ACCEPTANCE {0.0, 1.0};
+    static thread_local std::uniform_real_distribution ACCEPTANCE {0.0, 1.0};
 
-    static thread_local std::uniform_real_distribution<double> ANGLE {0.0, N_PI<2>};
+    /**
+     * The random angle on the uniform distribution [0, 2PI)
+     */
+    static thread_local std::uniform_real_distribution ANGLE {0.0, N_PI<2>};
 
     using function = std::function<std::tuple<double, std::tuple<double, double>>(Lattice&, std::mt19937&)>;
 

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <simde/x86/sse2.h>
 
 #include "utils.hpp"
@@ -9,4 +10,12 @@ double mm256_reduce_add_pd(simde__m256d v) {
 
     const simde__m128d high64 = simde_mm_unpackhi_pd(low, low);
     return simde_mm_cvtsd_f64(simde_mm_add_sd(low, high64));
+}
+
+std::vector<double> sweep_through_temperature(const double max_temperature, const std::size_t steps) {
+    std::vector<double> result (steps);
+    std::ranges::generate(result, [&, n = 0.0] mutable {
+        return n += max_temperature / static_cast<double>(steps);
+    });
+    return result;
 }

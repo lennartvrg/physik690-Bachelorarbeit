@@ -4,3 +4,6 @@
 [submodule "thirdparty/simde"]
 	path = thirdparty/simde
 	url = git@github.com:simd-everywhere/simde.git
+[submodule "thirdparty/tomlplusplus"]
+	path = thirdparty/tomlplusplus
+	url = git@github.com:marzer/tomlplusplus.git

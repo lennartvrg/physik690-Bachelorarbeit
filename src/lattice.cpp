@@ -6,7 +6,7 @@
 
 #include "lattice.hpp"
 #include "utils.hpp"
-#include "algorithms.hpp"
+#include "algorithms/algorithms.hpp"
 
 Lattice::Lattice(const std::size_t length, const double beta) : beta(beta), length(length), spins(length * length) {
     assert(length * length % 4 == 0 && "Lattice size must be a multiple of 4 as the SIMD instructions won't work otherwise");

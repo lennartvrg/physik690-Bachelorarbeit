@@ -13,12 +13,16 @@ sqlite_dep = sqlite.get_variable('sqlitecpp_dep')
 simde = subproject('simde')
 simde_dep = simde.get_variable('simde_dep')
 
+tomlplusplus = subproject('tomlplusplus')
+tomlplusplus_dep = tomlplusplus.get_variable('tomlplusplus_dep')
+
 fftw3_dep = dependency('fftw3', version: '>= 3.0.0', required: true)
 
 dependencies = [
   sqlite_dep,
   simde_dep,
-  fftw3_dep
+  fftw3_dep,
+  tomlplusplus_dep
 ]
 
 incdir = include_directories('include')
@@ -26,10 +30,11 @@ incdir = include_directories('include')
 exe = executable(
   'xy_model',
   'src/utils.cpp',
+  'src/config.cpp',
   'src/lattice.cpp',
-  'src/algorithms.cpp',
-  'src/metropolis.cpp',
-  'src/wolff.cpp',
+  'src/algorithms/algorithms.cpp',
+  'src/algorithms/metropolis.cpp',
+  'src/algorithms/wolff.cpp',
   'src/analysis/autocorrelation.cpp',
   'src/analysis/bootstrap.cpp',
   'src/storage/sqlite_storage.cpp',

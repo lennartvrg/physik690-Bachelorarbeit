@@ -2,7 +2,7 @@
 #include <cmath>
 #include <unordered_set>
 
-#include "wolff.hpp"
+#include "algorithms/wolff.hpp"
 
 std::tuple<double, std::tuple<double, double>> algorithms::wolff(Lattice & lattice, std::mt19937 & rng) noexcept {
     // Prepares the result objects containing the total change of energy and magnetization

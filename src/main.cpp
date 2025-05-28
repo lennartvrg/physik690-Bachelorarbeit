@@ -6,23 +6,16 @@
 #include <filesystem>
 #include <fstream>
 
+#include "config.hpp"
 #include "lattice.hpp"
-#include "wolff.hpp"
-#include "metropolis.hpp"
+#include "utils.hpp"
+#include "algorithms/wolff.hpp"
 #include "analysis/autocorrelation.hpp"
 #include "analysis/boostrap.hpp"
 #include "storage/sqlite_storage.hpp"
 #include "storage/storage.hpp"
 
 static std::mutex mtx;
-
-static std::vector<double> sweep_through_temperature() {
-    std::vector<double> result (64);
-    std::ranges::generate(result, [&, n = 0.0] mutable {
-        return n += 3.0 / static_cast<double>(result.size());
-    });
-    return result;
-}
 
 void write_output_csv(const std::ostringstream & measurements, const std::string & file_name, const std::string & headers) {
     std::filesystem::create_directories("output");
@@ -50,11 +43,16 @@ std::tuple<double, double, double, double, double, double> simulate_size(const s
 }
 
 int main() {
-    const std::unique_ptr<Storage> storage { new SQLiteStorage() };
-    storage->next_configuration();
+    const auto config = Config::from_file("config.toml");
+    const auto storage = std::make_unique<SQLiteStorage>();
 
+    storage->prepare_simulation(config);
+    while (const auto chunk = storage->next_chunk(0))
+        std::cout << "Found chunk with configuration ID " << chunk->configuration_id << std::endl;
+
+    return 0;
     std::ostringstream os;
-    const auto range = sweep_through_temperature();
+    const auto range = sweep_through_temperature(3.0, 64);
 
     std::atomic_uint64_t counter {0};
     std::for_each(std::execution::par, range.begin(), range.end(), [&] (const double temperature) {

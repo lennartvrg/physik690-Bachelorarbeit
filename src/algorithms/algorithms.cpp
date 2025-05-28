@@ -1,4 +1,4 @@
-#include "algorithms.hpp"
+#include "algorithms/algorithms.hpp"
 
 std::tuple<std::vector<double>, std::vector<double>> algorithms::simulate(Lattice & lattice, const std::size_t sweeps, std::mt19937 &rng, const function & sweep) noexcept {
 	auto current_energy = lattice.energy();
