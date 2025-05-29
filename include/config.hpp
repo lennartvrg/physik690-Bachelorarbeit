@@ -3,14 +3,14 @@
 
 #include <cstddef>
 #include <map>
-#include <set>
+#include <unordered_set>
 
 #include "algorithms/algorithms.hpp"
 
 struct AlgorithmConfig {
 	const std::size_t num_chunks;
 	const std::size_t sweeps_per_chunk;
-	const std::set<std::size_t> sizes;
+	const std::unordered_set<std::size_t> sizes;
 };
 
 struct Config {

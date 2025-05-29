@@ -1,9 +1,20 @@
 #include <algorithm>
+#include <unistd.h>
+#include <climits>
 #include <simde/x86/sse2.h>
 
 #include "utils.hpp"
 
-double mm256_reduce_add_pd(simde__m256d v) {
+std::string hostname() {
+    char buffer[HOST_NAME_MAX + 1];
+    gethostname(buffer, HOST_NAME_MAX + 1);
+
+    const auto end = std::find(buffer, buffer + sizeof(buffer), '\0');
+    return { buffer, end };
+}
+
+
+double mm256_reduce_add_pd(const simde__m256d v) {
     simde__m128d low = simde_mm256_castpd256_pd128(v);
     const simde__m128d high = simde_mm256_extractf128_pd(v, 1);
     low = simde_mm_add_pd(low, high);

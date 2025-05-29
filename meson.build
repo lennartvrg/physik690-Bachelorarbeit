@@ -16,13 +16,17 @@ simde_dep = simde.get_variable('simde_dep')
 tomlplusplus = subproject('tomlplusplus')
 tomlplusplus_dep = tomlplusplus.get_variable('tomlplusplus_dep')
 
+json = subproject('json')
+json_dep = json.get_variable('nlohmann_json_dep')
+
 fftw3_dep = dependency('fftw3', version: '>= 3.0.0', required: true)
 
 dependencies = [
   sqlite_dep,
   simde_dep,
   fftw3_dep,
-  tomlplusplus_dep
+  tomlplusplus_dep,
+  json_dep
 ]
 
 incdir = include_directories('include')

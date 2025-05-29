@@ -14,6 +14,7 @@ public:
 	std::optional<Chunk> next_chunk(int simulation_id) override;
 
 private:
+	int worker_id;
 	SQLite::Database db;
 };
 

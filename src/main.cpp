@@ -43,14 +43,24 @@ std::tuple<double, double, double, double, double, double> simulate_size(const s
 }
 
 int main() {
-    const auto config = Config::from_file("config.toml");
-    const auto storage = std::make_unique<SQLiteStorage>();
+    try {
+        const auto config = Config::from_file("config.toml");
+        const auto storage = std::make_unique<SQLiteStorage>();
 
-    storage->prepare_simulation(config);
-    while (const auto chunk = storage->next_chunk(0))
-        std::cout << "Found chunk with configuration ID " << chunk->configuration_id << std::endl;
+        storage->prepare_simulation(config);
 
-    return 0;
+        auto counter = 0;
+        while (const auto chunk = storage->next_chunk(0)) {
+            counter++;
+        }
+        std::cout << "Found number of chunks " << counter << std::endl;
+
+        return 0;
+    } catch (const std::exception & e) {
+        std::cerr << e.what() << std::endl;
+        return -1;
+    }
+
     std::ostringstream os;
     const auto range = sweep_through_temperature(3.0, 64);
 

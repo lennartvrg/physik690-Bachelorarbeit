@@ -1,6 +1,10 @@
 [simulation]
 identifier = 1
-bootstrap = 100000
+bootstrap_resamples = 100000
+
+[temperature]
+max = 3.0
+steps = 64
 
 [metropolis]
 num_chunks = 20

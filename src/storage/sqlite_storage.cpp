@@ -3,9 +3,10 @@
 #include <iostream>
 
 #include "utils.hpp"
+#include "SQLiteCpp/Savepoint.h"
 #include "SQLiteCpp/Transaction.h"
 
-static std::string Migrations = R"~~~~~~(
+constexpr std::string_view Migrations = R"~~~~~~(
 CREATE TABLE IF NOT EXISTS "simulations" (
 	simulation_id			INTEGER				NOT NULL,
 
@@ -16,12 +17,12 @@ CREATE TABLE IF NOT EXISTS "simulations" (
 );
 
 CREATE TRIGGER IF NOT EXISTS "TRG.ClearEstimates"
-AFTER UPDATE OF bootstrap_resamples ON "simulations"
-FOR EACH ROW WHEN OLD.bootstrap_resamples != NEW.bootstrap_resamples
+AFTER UPDATE OF "bootstrap_resamples" ON "simulations"
+FOR EACH ROW WHEN OLD."bootstrap_resamples" != NEW."bootstrap_resamples"
 BEGIN
-	DELETE FROM "estimates" WHERE configuration_id IN (
-		SELECT configuration_id FROM "configurations"
-		WHERE simulation_id = NEW.simulation_id
+	DELETE FROM "estimates" WHERE "configuration_id" IN (
+		SELECT "configuration_id" FROM "configurations"
+		WHERE "simulation_id" = NEW."simulation_id"
 	);
 END;
 
@@ -39,21 +40,56 @@ CREATE TABLE IF NOT EXISTS "metadata" (
 
 CREATE UNIQUE INDEX IF NOT EXISTS "IX.Metadata_SimulationId_Algorithm" ON "metadata" (simulation_id, algorithm);
 
+CREATE TABLE IF NOT EXISTS "workers" (
+	worker_id				INTEGER				NOT NULL,
+
+	name					TEXT				NOT NULL CHECK (length(name) > 0),
+	last_active_at			DATETIME			NOT NULL DEFAULT (datetime()),
+
+	CONSTRAINT "PK.Workers_WorkerId" PRIMARY KEY (worker_id AUTOINCREMENT)
+);
+
+CREATE INDEX IF NOT EXISTS "IX.Workers_LastActiveAt" ON "workers" (last_active_at);
+
+CREATE TRIGGER IF NOT EXISTS "TRG.RemoveInactiveWorkers"
+AFTER INSERT ON "workers" FOR EACH ROW
+BEGIN
+	UPDATE "configurations" SET "active_worker_id" = NULL WHERE "active_worker_id" IN (
+		SELECT "worker_id" FROM "workers" WHERE "last_active_at" < datetime('now', '-5 minutes')
+	);
+
+	DELETE FROM "workers" WHERE NOT EXISTS (
+		SELECT * FROM "configurations" c WHERE c."active_worker_id" = "worker_id"
+	) AND NOT EXISTS (
+		SELECT * FROM "chunks" c WHERE c."worker_id" = "worker_id"
+	) AND "last_active_at" < datetime('now', '-5 minutes');
+END;
 
 CREATE TABLE IF NOT EXISTS "configurations" (
 	configuration_ID		INTEGER				NOT NULL,
 
+	active_worker_id		INTEGER					NULL,
 	simulation_id			INTEGER				NOT NULL,
 	metadata_id				INTEGER				NOT NULL,
 	lattice_size			INTEGER				NOT NULL CHECK (lattice_size > 0),
 	temperature				REAL				NOT NULL CHECK (temperature > 0.0),
 
 	CONSTRAINT "PK.Configurations_ConfigurationId" PRIMARY KEY (configuration_ID AUTOINCREMENT),
+	CONSTRAINT "FK.Configurations_ActiveWorkerId" FOREIGN KEY (active_worker_id) REFERENCES "workers" (active_worker_id),
 	CONSTRAINT "FK.Configurations_SimulationId"	FOREIGN KEY (simulation_id) REFERENCES "simulations" (simulation_id),
 	CONSTRAINT "FK.Configurations_MetadataId" FOREIGN KEY (metadata_id) REFERENCES "metadata" (metadata_id)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS "IX.Configurations_MetadataId_Algorithm_LatticeSize_Temperature" ON "configurations" (simulation_id, metadata_id, lattice_size, temperature);
+
+CREATE INDEX IF NOT EXISTS "IX.Configurations_ActiveWorkerId" ON "configurations" (active_worker_id);
+
+CREATE TRIGGER IF NOT EXISTS "TRG.UpdateWorkerLastActive"
+AFTER UPDATE OF "active_worker_id" ON "configurations"
+FOR EACH ROW WHEN NEW."active_worker_id" IS NOT NULL AND NEW."active_worker_id" != OLD."active_worker_id"
+BEGIN
+	UPDATE "workers" SET "last_active_at" = datetime() WHERE "worker_id" = NEW."active_worker_id";
+END;
 
 
 CREATE TABLE IF NOT EXISTS "types" (
@@ -71,10 +107,12 @@ CREATE TABLE IF NOT EXISTS "chunks" (
 	configuration_id		INTEGER				NOT NULL,
 	"index"					INTEGER				NOT NULL,
 
+	worker_id				INTEGER				NOT NULL,
 	spins					TEXT				NOT NULL CHECK (json_valid(spins, 6) = 1 AND json_type(spins) = 'array'),
 
 	CONSTRAINT "PK.Chunks_ConfigurationId_Index" PRIMARY KEY ("configuration_id", "index"),
-	CONSTRAINT "FK.Chunks_ConfigurationId" FOREIGN KEY (configuration_id) REFERENCES "configurations" (configuration_id)
+	CONSTRAINT "FK.Chunks_ConfigurationId" FOREIGN KEY (configuration_id) REFERENCES "configurations" (configuration_id),
+	CONSTRAINT "FK.Chunks_WorkerId" FOREIGN KEY (worker_id) REFERENCES "workers" (worker_id)
 );
 
 
@@ -116,43 +154,58 @@ CREATE TABLE IF NOT EXISTS "estimates" (
 );
 )~~~~~~";
 
-SQLiteStorage::SQLiteStorage() : db("output/data.db", SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE) {
+constexpr std::string_view RegisterWorkerQuery = R"~~~~~~(
+INSERT INTO "workers" (name) VALUES (@name) RETURNING "worker_id"
+)~~~~~~";
+
+SQLiteStorage::SQLiteStorage() : worker_id(-1), db("output/data.db", SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE | SQLite::OPEN_FULLMUTEX) {
 	try {
-		SQLite::Transaction transaction(db);
-		db.exec(Migrations);
+		db.setBusyTimeout(10000);
+		db.exec("PRAGMA synchronous = NORMAL");
+
+		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
+		db.exec(Migrations.data());
+
+		SQLite::Statement worker { db, RegisterWorkerQuery.data() };
+		worker.bind("@name", hostname());
+
+		while (worker.executeStep()) {
+			worker_id = worker.getColumn(0).getInt();
+		}
+
 		transaction.commit();
-	} catch (std::exception &e) {
+	} catch (const std::exception &e) {
 		std::cout << "Failed to migrate database. SQLite exception: " << e.what() << std::endl;
-		std::terminate();
+		std::rethrow_exception(std::current_exception());
 	}
 }
 
-static std::string InsertSimulationQuery = R"~~~~~~(
+constexpr std::string_view InsertSimulationQuery = R"~~~~~~(
 INSERT INTO "simulations" (simulation_id, bootstrap_resamples) VALUES (@simulation_id, @bootstrap_resamples)
 ON CONFLICT DO UPDATE SET bootstrap_resamples = @bootstrap_resamples
 )~~~~~~";
 
-static std::string InsertMetadataQuery = R"~~~~~~(
+constexpr std::string_view InsertMetadataQuery = R"~~~~~~(
 INSERT INTO "metadata" (simulation_id, algorithm, num_chunks, sweeps_per_chunk) VALUES (@simulation_id, @algorithm, @num_chunks, @sweeps_per_chunk)
 ON CONFLICT DO UPDATE SET num_chunks = @num_chunks WHERE num_chunks < @num_chunks RETURNING metadata_id
 )~~~~~~";
 
-static std::string InsertConfigurationsQuery = R"~~~~~~(
+constexpr std::string_view InsertConfigurationsQuery = R"~~~~~~(
 INSERT INTO "configurations" (simulation_id, metadata_id, lattice_size, temperature) VALUES (@simulation_id, @metadata_id, @lattice_size, @temperature)
 ON CONFLICT DO NOTHING
 )~~~~~~";
 
 void SQLiteStorage::prepare_simulation(const Config config) {
 	try {
-		SQLite::Transaction transaction(db);
+		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
-		SQLite::Statement simulation { db, InsertSimulationQuery };
+		SQLite::Statement simulation { db, InsertSimulationQuery.data() };
 		simulation.bind("@simulation_id", static_cast<int>(config.simulation_id));
 		simulation.bind("@bootstrap_resamples", static_cast<int>(config.bootstrap_resamples));
 		simulation.exec();
 
-		SQLite::Statement metadata { db, InsertMetadataQuery };
-		SQLite::Statement configurations { db, InsertConfigurationsQuery };
+		SQLite::Statement metadata { db, InsertMetadataQuery.data() };
+		SQLite::Statement configurations { db, InsertConfigurationsQuery.data() };
 
 		for (const auto & [key, value] : config.algorithms) {
 			metadata.bind("@simulation_id", static_cast<int>(config.simulation_id));
@@ -179,12 +232,11 @@ void SQLiteStorage::prepare_simulation(const Config config) {
 		transaction.commit();
 	} catch (std::exception & e) {
 		std::cout << "Failed to prepare simulation. SQLite exception: " << e.what() << std::endl;
-		std::terminate();
+		std::rethrow_exception(std::current_exception());
 	}
 }
 
-
-static std::string NextChunkQuery = R"~~~~~~(
+constexpr std::string_view NextChunkQuery = R"~~~~~~(
 SELECT c.configuration_ID, m.algorithm, c.lattice_size, c.temperature, m.sweeps_per_chunk, k.spins
 FROM simulations s
 INNER JOIN configurations c on s.simulation_id = c.simulation_id
@@ -192,29 +244,50 @@ INNER JOIN metadata m ON c.metadata_id = m.metadata_id
 LEFT JOIN (
     SELECT k.configuration_id, k.spins, MAX(k."index") AS num_chunks
     FROM chunks k
-) k ON c.configuration_ID = k.configuration_id
-WHERE s.simulation_id = ? AND IfNull(k.num_chunks, 0) < m.num_chunks
+) k ON c.configuration_ID = k.configuration_id AND IfNull(k.num_chunks, 0) < m.num_chunks
+WHERE s.simulation_id = ? AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
+	SELECT "worker_id" FROM "workers" WHERE "last_active_at" < datetime('now', '-5 minutes')
+))
 ORDER BY c.lattice_size DESC LIMIT 1;
+)~~~~~~";
+
+constexpr std::string_view SetConfigurationActiveWorker = R"~~~~~~(
+UPDATE "configurations" SET "active_worker_id" = @worker_id WHERE "configuration_id" = @configuration_id;
 )~~~~~~";
 
 std::optional<Chunk> SQLiteStorage::next_chunk(const int simulation_id) {
 	try {
-		SQLite::Statement query(db, NextChunkQuery);
-		query.bind(1, simulation_id);
+		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
-		if (query.executeStep()) {
-			return std::optional<Chunk>({
-				query.getColumn(0).getInt(),
-				static_cast<algorithms::Algorithm>(query.getColumn(1).getInt()),
-				static_cast<std::size_t>(query.getColumn(2).getInt()),
-				query.getColumn(3).getDouble(),
-				static_cast<std::size_t>(query.getColumn(4).getInt()),
-				std::nullopt
-			});
+		SQLite::Statement next_chunk { db, NextChunkQuery.data() };
+		next_chunk.bind(1, simulation_id);
+
+		if (!next_chunk.executeStep()) return std::nullopt;
+		const auto configuration_id = next_chunk.getColumn(0).getInt();
+
+		SQLite::Statement worker { db, SetConfigurationActiveWorker.data() };
+		worker.bind("@configuration_id", configuration_id);
+		worker.bind("@worker_id", worker_id);
+
+		if (worker.exec() != 1) return std::nullopt;
+		transaction.commit();
+
+		const auto spins = std::nullopt;
+		if (!next_chunk.getColumn(5).isNull()) {
+
 		}
+
+		return std::optional<Chunk>({
+			next_chunk.getColumn(0).getInt(),
+			static_cast<algorithms::Algorithm>(next_chunk.getColumn(1).getInt()),
+			static_cast<std::size_t>(next_chunk.getColumn(2).getInt()),
+			next_chunk.getColumn(3).getDouble(),
+			static_cast<std::size_t>(next_chunk.getColumn(4).getInt()),
+			spins
+		});
 
 	} catch (std::exception & e) {
 		std::cout << "SQLite exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
 	}
-	return std::nullopt;
 }

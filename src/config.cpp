@@ -3,19 +3,18 @@
 #include <iostream>
 #include <toml++/toml.hpp>
 
-AlgorithmConfig parse_algorithm_config(const toml::node_view<const toml::node> node) {
-	std::set<std::size_t> sizes {};
+AlgorithmConfig parse_algorithm_config(const toml::node_view<const toml::node> node) noexcept {
+	std::unordered_set<std::size_t> sizes {};
 	node["sizes"].as_array()->for_each([&] <typename T>(T && el) {
 		if constexpr (toml::is_integer<T>) {
 			sizes.insert(el.template value_or<std::size_t>(10));
 		}
 	});
 
-	return AlgorithmConfig {
-		node["num_chunks"].value_or<std::size_t>(1),
-		node["sweeps_per_chunk"].value_or<std::size_t>(100000),
-		sizes,
-	};
+	const auto num_chunks = node["num_chunks"].value_or<std::size_t>(1);
+	const auto sweeps_per_chunk = node["sweeps_per_chunk"].value_or<std::size_t>(100000);
+
+	return AlgorithmConfig { num_chunks, sweeps_per_chunk, sizes };
 }
 
 Config Config::from_file(const std::string_view path) {
@@ -24,11 +23,12 @@ Config Config::from_file(const std::string_view path) {
 	const auto simulation_id = config["simulation"]["simulation_id"].value_or<std::size_t>(0);
 	const auto bootstrap_resamples = config["simulation"]["bootstrap_resamples"].value_or<std::size_t>(100000);
 
+	const auto max_temperature = config["temperature"]["max"].value_or<double>(3.0);
+	const auto temperature_steps = config["temperature"]["steps"].value_or<std::size_t>(64);
+
 	std::map<algorithms::Algorithm, AlgorithmConfig> algorithms;
 	if (const auto node = config["metropolis"]) algorithms.emplace(algorithms::METROPOLIS, parse_algorithm_config(node));
 	if (const auto node = config["wolff"]) algorithms.emplace(algorithms::WOLFF, parse_algorithm_config(node));
 
-	return Config { simulation_id, bootstrap_resamples, 3.0, 64, algorithms };
+	return Config { simulation_id, bootstrap_resamples, max_temperature, temperature_steps, algorithms };
 }
-
-
