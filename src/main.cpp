@@ -1,4 +1,5 @@
 #include <iostream>
+#include <sqlite3.h>
 
 #include "config.hpp"
 #include "lattice.hpp"
@@ -24,7 +25,6 @@ SimulationResult simulate_size(const Chunk & chunk) {
 
     const auto [m_tau, _2] = analysis::integrated_autocorrelation_time(magnets);
     const auto [m_mean, m_stddev] = analysis::bootstrap(rng, magnets, m_tau, 100);
-    std::cout << e_mean << std::endl;
 
     return {e_tau, e_mean, e_stddev, m_tau, m_mean, m_stddev};
 }
@@ -33,13 +33,26 @@ std::optional<Chunk> fetch_next(const std::shared_ptr<SQLiteStorage> & storage, 
     return storage->next_chunk(static_cast<int>(simulation_id));
 }
 
+static std::atomic_size_t counter;
+
+void save_chunk(const Chunk & chunk, const SimulationResult & result, [[maybe_unused]] const std::shared_ptr<SQLiteStorage> & storage, [[maybe_unused]] const std::size_t simulation_id) {
+    std::cout << "ConfigurationId: " << chunk.configuration_id << " has mean energy: " << get<1>(result) << std::endl;
+    ++counter;
+}
+
 int main() {
     try {
         const auto config = Config::from_file("config.toml");
-        const auto storage = std::make_shared<SQLiteStorage>();
 
+        const auto storage = std::make_shared<SQLiteStorage>();
         storage->prepare_simulation(config);
-        utils::distribute_tasks(fetch_next, simulate_size, storage, config.simulation_id);
+
+        const auto next = std::function<std::optional<Chunk>(std::shared_ptr<SQLiteStorage>, std::size_t)>(fetch_next);
+        const auto task = std::function<SimulationResult(Chunk)>(simulate_size);
+        const auto save = std::function<void(Chunk, SimulationResult, std::shared_ptr<SQLiteStorage>, std::size_t)>(save_chunk);
+        utils::distribute_tasks(next, task, save, storage, config.simulation_id);
+
+        std::cout << "Counter: " << counter << std::endl;
 
         return 0;
     } catch (const std::exception & e) {

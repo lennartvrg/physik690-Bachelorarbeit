@@ -85,7 +85,7 @@ CREATE INDEX IF NOT EXISTS "IX.Configurations_ActiveWorkerId" ON "configurations
 
 CREATE TRIGGER IF NOT EXISTS "TRG.UpdateWorkerLastActive"
 AFTER UPDATE OF "active_worker_id" ON "configurations"
-FOR EACH ROW WHEN NEW."active_worker_id" IS NOT NULL AND NEW."active_worker_id" != OLD."active_worker_id"
+FOR EACH ROW WHEN NEW."active_worker_id" IS NOT NULL
 BEGIN
 	UPDATE "workers" SET "last_active_at" = datetime() WHERE "worker_id" = NEW."active_worker_id";
 END;
