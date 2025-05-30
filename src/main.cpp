@@ -9,6 +9,7 @@
 #include "analysis/boostrap.hpp"
 #include "storage/sqlite_storage.hpp"
 #include "utils/task_distributor.hpp"
+#include "tasks/simulate_size_task.hpp"
 
 using SimulationResult = std::tuple<double, double, double, double, double, double>;
 
@@ -46,6 +47,8 @@ int main() {
 
         const auto storage = std::make_shared<SQLiteStorage>();
         storage->prepare_simulation(config);
+
+        const tasks::SimulateSizeTask<SQLiteStorage> simulation { config };
 
         const auto next = std::function<std::optional<Chunk>(std::shared_ptr<SQLiteStorage>, std::size_t)>(fetch_next);
         const auto task = std::function<SimulationResult(Chunk)>(simulate_size);
