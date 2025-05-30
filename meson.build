@@ -33,7 +33,7 @@ incdir = include_directories('include')
 
 exe = executable(
   'xy_model',
-  'src/utils.cpp',
+  'src/utils/utils.cpp',
   'src/config.cpp',
   'src/lattice.cpp',
   'src/algorithms/algorithms.cpp',

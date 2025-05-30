@@ -1,11 +1,12 @@
 #ifndef LATTICE_HPP
 #define LATTICE_HPP
 
+#include <optional>
 #include <vector>
 
 class Lattice {
 public:
-    Lattice(std::size_t length, double beta);
+    Lattice(std::size_t length, double beta, const std::optional<std::vector<double>>& spins);
 
     [[nodiscard]] constexpr std::size_t side_length() const noexcept {
         return length;

@@ -1,10 +1,9 @@
-#include "storage/sqlite_storage.hpp"
-
+#include <nlohmann/json.hpp>
 #include <iostream>
+#include <SQLiteCpp/Transaction.h>
 
-#include "utils.hpp"
-#include "SQLiteCpp/Savepoint.h"
-#include "SQLiteCpp/Transaction.h"
+#include "utils/utils.hpp"
+#include "storage/sqlite_storage.hpp"
 
 constexpr std::string_view Migrations = R"~~~~~~(
 CREATE TABLE IF NOT EXISTS "simulations" (
@@ -167,7 +166,7 @@ SQLiteStorage::SQLiteStorage() : worker_id(-1), db("output/data.db", SQLite::OPE
 		db.exec(Migrations.data());
 
 		SQLite::Statement worker { db, RegisterWorkerQuery.data() };
-		worker.bind("@name", hostname());
+		worker.bind("@name", utils::hostname());
 
 		while (worker.executeStep()) {
 			worker_id = worker.getColumn(0).getInt();
@@ -217,7 +216,7 @@ void SQLiteStorage::prepare_simulation(const Config config) {
 			metadata.reset();
 
 			for (const auto size : value.sizes) {
-				for (const auto temperature : sweep_through_temperature(config.max_temperature, config.temperature_steps)) {
+				for (const auto temperature : utils::sweep_through_temperature(config.max_temperature, config.temperature_steps)) {
 					configurations.bind("@simulation_id", static_cast<int>(config.simulation_id));
 					configurations.bind("@metadata_id", metadata_id);
 					configurations.bind("@lattice_size", static_cast<int>(size));
@@ -272,9 +271,11 @@ std::optional<Chunk> SQLiteStorage::next_chunk(const int simulation_id) {
 		if (worker.exec() != 1) return std::nullopt;
 		transaction.commit();
 
-		const auto spins = std::nullopt;
+		std::optional<std::vector<double>> spins = std::nullopt;
 		if (!next_chunk.getColumn(5).isNull()) {
-
+			const auto str = next_chunk.getColumn(5).getString();
+			const auto json = nlohmann::json::parse(str);
+			spins = std::optional(json.get<std::vector<double>>());
 		}
 
 		return std::optional<Chunk>({

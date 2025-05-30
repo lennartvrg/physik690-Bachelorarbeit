@@ -5,11 +5,13 @@
 #include <simde/x86/sse2.h>
 
 #include "lattice.hpp"
-#include "utils.hpp"
+#include "../include/utils/utils.hpp"
 #include "algorithms/algorithms.hpp"
 
-Lattice::Lattice(const std::size_t length, const double beta) : beta(beta), length(length), spins(length * length) {
+Lattice::Lattice(const std::size_t length, const double beta, const std::optional<std::vector<double>> & spins) : beta(beta), length(length), spins(spins.value_or(std::vector<double> (length * length))) {
     assert(length * length % 4 == 0 && "Lattice size must be a multiple of 4 as the SIMD instructions won't work otherwise");
+    assert(beta > 0 && "Beta must be greater than zero");
+    assert(this->spins.size() == length * length && "Number of spins must be L^2");
 }
 
 double Lattice::get(const std::size_t i) const noexcept {
@@ -33,7 +35,7 @@ double Lattice::energy() const noexcept {
 
         result = simde_mm256_add_pd(cos, result);
     }
-    return -mm256_reduce_add_pd(result);
+    return -utils::mm256_reduce_add_pd(result);
 }
 
 double Lattice::energy_diff(const std::size_t i, const double angle) const noexcept {
@@ -46,7 +48,7 @@ double Lattice::energy_diff(const std::size_t i, const double angle) const noexc
     const simde__m256d b = simde_mm256_set1_pd(angle);
     const simde__m256d after = simde_mm256_cos_pd(simde_mm256_sub_pd(b, neighbours));
 
-    return mm256_reduce_add_pd(before) - mm256_reduce_add_pd(after);
+    return utils::mm256_reduce_add_pd(before) - utils::mm256_reduce_add_pd(after);
 }
 
 std::tuple<double, double> Lattice::magnetization() const noexcept {
