@@ -1,9 +1,12 @@
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <SQLiteCpp/Transaction.h>
+#include <flatbuffers/flatbuffers.h>
 
 #include "utils/utils.hpp"
 #include "storage/sqlite_storage.hpp"
+
+#include "schemas/spins_generated.h"
 
 constexpr std::string_view Migrations = R"~~~~~~(
 CREATE TABLE IF NOT EXISTS "simulations" (
@@ -239,7 +242,7 @@ void SQLiteStorage::prepare_simulation(const Config config) {
 }
 
 constexpr std::string_view NextChunkQuery = R"~~~~~~(
-SELECT c.configuration_id, IfNull(k.num_chunks, 0) + 1, m.algorithm, c.lattice_size, c.temperature, m.sweeps_per_chunk, json(k.spins)
+SELECT c.configuration_id, IfNull(k.num_chunks, 0) + 1, m.algorithm, c.lattice_size, c.temperature, m.sweeps_per_chunk, k.spins
 FROM simulations s
 INNER JOIN configurations c on s.simulation_id = c.simulation_id
 INNER JOIN metadata m ON c.metadata_id = m.metadata_id
@@ -251,7 +254,7 @@ LEFT JOIN (
 WHERE s.simulation_id = @simulation_id AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
 	SELECT "worker_id" FROM "workers" WHERE "last_active_at" < datetime('now', '-5 minutes')
 )) AND IfNull(k.num_chunks, 0) + 1 < m.num_chunks
-ORDER BY c.lattice_size DESC LIMIT 1;
+ORDER BY IfNull(k.num_chunks, 0) ASC LIMIT 1;
 )~~~~~~";
 
 constexpr std::string_view SetConfigurationActiveWorker = R"~~~~~~(
@@ -277,9 +280,9 @@ std::optional<Chunk> SQLiteStorage::next_chunk(const int simulation_id) {
 
 		std::optional<std::vector<double>> spins = std::nullopt;
 		if (!next_chunk.getColumn(6).isNull()) {
-			const auto str = next_chunk.getColumn(6).getString();
-			const auto json = nlohmann::json::parse(str);
-			spins = std::optional(json.get<std::vector<double>>());
+			const auto buffer = next_chunk.getColumn(6).getBlob();
+			const auto data = schemas::GetSpins(buffer);
+			spins = std::vector(data->data()->begin(), data->data()->end());
 		}
 
 		return std::optional<Chunk>({
@@ -299,7 +302,7 @@ std::optional<Chunk> SQLiteStorage::next_chunk(const int simulation_id) {
 }
 
 constexpr std::string_view InsertChunkQuery = R"~~~~~~(
-INSERT INTO "chunks" (configuration_id, "index", worker_id, spins) VALUES (@configuration_id, @chunk_id, @worker_id, jsonb(@spins)) RETURNING chunk_id
+INSERT INTO "chunks" (configuration_id, "index", worker_id, spins) VALUES (@configuration_id, @index, @worker_id, @spins) RETURNING chunk_id
 )~~~~~~";
 
 constexpr std::string_view InsertResultQuery = R"~~~~~~(
@@ -314,18 +317,23 @@ void SQLiteStorage::save_chunk(const Chunk & chunk, [[maybe_unused]] const std::
 	try {
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
+		flatbuffers::FlatBufferBuilder builder { sizeof(std::vector<double>) + sizeof(double) * spins.size() };
+		const auto offset = builder.CreateVector(spins.data(), spins.size());
+
+		const auto data = schemas::CreateSpins(builder, offset);
+		builder.Finish(data);
+
 		SQLite::Statement chunk_stmt { db, InsertChunkQuery.data() };
 		chunk_stmt.bind("@configuration_id", chunk.configuration_id);
-		chunk_stmt.bind("@chunk_id", chunk.chunk_id);
-		chunk_stmt.bind("@spins", nlohmann::json { spins }.at(0).dump());
+		chunk_stmt.bind("@index", chunk.index);
 		chunk_stmt.bind("@worker_id", worker_id);
+		chunk_stmt.bind("@spins", builder.GetBufferPointer(), static_cast<int>(builder.GetSize()));
 
 		auto chunk_id = -1;
 		while (chunk_stmt.executeStep()) chunk_id = chunk_stmt.getColumn(0).getInt();
 
 		SQLite::Statement result { db, InsertResultQuery.data() };
 		for (const auto & [key, measurements] : results) {
-			break;
 			for (std::size_t i = 0; i < measurements.size(); ++i) {
 				result.bind("@chunk_id", chunk_id);
 				result.bind("@type_id", key);

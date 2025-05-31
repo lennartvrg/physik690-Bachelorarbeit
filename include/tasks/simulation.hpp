@@ -41,7 +41,7 @@ namespace tasks {
 		}
 
 		void save_task(const Chunk & chunk, const std::tuple<Lattice, observables::Map> & result) override {
-			std::cout << "ConfigurationId: " << chunk.configuration_id << " | ChunkId: " << chunk.chunk_id << " | Size: " << chunk.lattice_size << std::endl;
+			std::cout << "ConfigurationId: " << chunk.configuration_id << " | Index: " << chunk.index << " | Size: " << chunk.lattice_size << std::endl;
 			this->storage->save_chunk(chunk, get<0>(result).get_spins(), get<1>(result));
 		}
 	};

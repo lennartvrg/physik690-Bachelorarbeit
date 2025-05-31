@@ -2,4 +2,4 @@ Task:
 	- Keep alive signal
 	- Check current worker still active before inserting chunks and results
 	- Keep track of tau value
-	- Better handling of last few values in tasks
+	- Better handling of last few values in tasks. If task is finished -> Always check for new tasks

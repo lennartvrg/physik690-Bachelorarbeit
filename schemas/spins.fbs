@@ -1,0 +1,7 @@
+namespace schemas;
+
+table Spins {
+    data: [double];
+}
+
+root_type Spins;

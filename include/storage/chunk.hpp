@@ -6,10 +6,10 @@
 
 #include "../algorithms/algorithms.hpp"
 
-struct Chunk {
+struct Chunk final {
 	const int configuration_id;
 
-	const int chunk_id;
+	const int index;
 
 	const algorithms::Algorithm algorithm;
 

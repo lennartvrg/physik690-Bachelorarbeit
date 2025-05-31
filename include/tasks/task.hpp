@@ -32,31 +32,28 @@ namespace tasks {
 			const auto max_workers = std::thread::hardware_concurrency();
 
 			// As long as there are new tasks, we want to delegate the task to a new worker
-			do {
-				while (const std::optional<TTask> in = next_task()) {
-					workers.fetch_add(1, std::memory_order_seq_cst);
+			while (const std::optional<TTask> in = next_task()) {
+				workers.fetch_add(1, std::memory_order_seq_cst);
 
-					// Starting to process the task on a new thread
-					std::thread([&] (const TTask value) {
-						const auto result = execute_task(value);
+				// Starting to process the task on a new thread
+				std::thread([&] (const TTask value) {
+					const auto result = execute_task(value);
 
-						// Add the task result to the queue
-						const std::scoped_lock lock { queue_mutex };
-						queue.push(std::make_tuple(value, result));
+					// Add the task result to the queue
+					const std::scoped_lock lock { queue_mutex };
+					queue.push(std::make_tuple(value, result));
 
-						// Indicate that the thread is finished
-						workers.fetch_sub(1, std::memory_order_seq_cst);
-						workers.notify_one();
-					}, *in).detach();
+					// Indicate that the thread is finished
+					workers.fetch_sub(1, std::memory_order_seq_cst);
+					workers.notify_one();
+				}, *in).detach();
 
-					// Wait until one worker has finished and save the queue
-					while (workers== max_workers) {
-						workers.wait(max_workers);
-					}
-					save_queue(queue, queue_mutex);
+				// Wait until one worker has finished and save the queue
+				while (workers== max_workers) {
+					workers.wait(max_workers);
 				}
-				std::this_thread::sleep_for(std::chrono::seconds(1));
-			} while (workers > 0);
+				save_queue(queue, queue_mutex);
+			};
 
 			// Wait until all workers are finished and drain the remaining queue
 			for (std::size_t value; (value = workers.load(std::memory_order_seq_cst)) != 0;) {
