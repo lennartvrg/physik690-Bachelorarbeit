@@ -1,7 +1,6 @@
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <SQLiteCpp/Transaction.h>
-#include <flatbuffers/flatbuffers.h>
 
 #include "utils/utils.hpp"
 #include "storage/sqlite_storage.hpp"
@@ -72,12 +71,12 @@ CREATE TABLE IF NOT EXISTS "configurations" (
 
 	active_worker_id		INTEGER					NULL,
 	simulation_id			INTEGER				NOT NULL,
-	metadata_id				INTEGER				NOT NULL,
+	metadata_id				INTEGER				NOT NULL CHECK (metadata_id >= 0),
 	lattice_size			INTEGER				NOT NULL CHECK (lattice_size > 0),
 	temperature				REAL				NOT NULL CHECK (temperature > 0.0),
 
 	CONSTRAINT "PK.Configurations_ConfigurationId" PRIMARY KEY (configuration_id AUTOINCREMENT),
-	CONSTRAINT "FK.Configurations_ActiveWorkerId" FOREIGN KEY (active_worker_id) REFERENCES "workers" (active_worker_id),
+	CONSTRAINT "FK.Configurations_ActiveWorkerId" FOREIGN KEY (active_worker_id) REFERENCES "workers" (worker_id),
 	CONSTRAINT "FK.Configurations_SimulationId"	FOREIGN KEY (simulation_id) REFERENCES "simulations" (simulation_id),
 	CONSTRAINT "FK.Configurations_MetadataId" FOREIGN KEY (metadata_id) REFERENCES "metadata" (metadata_id)
 );
@@ -124,11 +123,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS "IX.Chunks_ConfigurationId_Index" ON "chunks" 
 CREATE TABLE IF NOT EXISTS "results" (
 	chunk_id				INTEGER				NOT NULL,
 	type_id					INTEGER				NOT NULL,
-	"index"					INTEGER				NOT NULL,
 
-	value					REAL				NOT NULL,
+	data					BLOB				NOT NULL,
 
-	CONSTRAINT "PK.Results_ChunkId_TypeId_Index" PRIMARY KEY (chunk_id, type_id, "index"),
+	CONSTRAINT "PK.Results_ChunkId_TypeId_Index" PRIMARY KEY (chunk_id, type_id),
 	CONSTRAINT "FK.Results_ChunkId" FOREIGN KEY (chunk_id) REFERENCES "chunks" (chunk_id),
 	CONSTRAINT "FK.Results_TypeId" FOREIGN KEY (type_id) REFERENCES "types" (type_id)
 );
@@ -166,6 +164,7 @@ INSERT INTO "workers" (name) VALUES (@name) RETURNING "worker_id"
 SQLiteStorage::SQLiteStorage(const std::string_view & path) : worker_id(-1), db(path, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE | SQLite::OPEN_FULLMUTEX) {
 	try {
 		db.setBusyTimeout(10000);
+		db.exec("PRAGMA foreign_keys = ON");
 		db.exec("PRAGMA synchronous = NORMAL");
 
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
@@ -192,7 +191,11 @@ ON CONFLICT DO UPDATE SET bootstrap_resamples = @bootstrap_resamples
 
 constexpr std::string_view InsertMetadataQuery = R"~~~~~~(
 INSERT INTO "metadata" (simulation_id, algorithm, num_chunks, sweeps_per_chunk) VALUES (@simulation_id, @algorithm, @num_chunks, @sweeps_per_chunk)
-ON CONFLICT DO UPDATE SET num_chunks = @num_chunks WHERE num_chunks < @num_chunks RETURNING metadata_id
+ON CONFLICT DO UPDATE SET num_chunks = @num_chunks WHERE num_chunks < @num_chunks
+)~~~~~~";
+
+constexpr std::string_view FetchMetadataQuery = R"~~~~~~(
+SELECT metadata_id FROM "metadata" WHERE simulation_id = @simulation_id AND algorithm = @algorithm
 )~~~~~~";
 
 constexpr std::string_view InsertConfigurationsQuery = R"~~~~~~(
@@ -209,17 +212,24 @@ void SQLiteStorage::prepare_simulation(const Config config) {
 		simulation.bind("@bootstrap_resamples", static_cast<int>(config.bootstrap_resamples));
 		simulation.exec();
 
-		SQLite::Statement metadata { db, InsertMetadataQuery.data() };
+		SQLite::Statement insert_metadata { db, InsertMetadataQuery.data() };
+		SQLite::Statement fetch_metadata { db, FetchMetadataQuery.data() };
 		SQLite::Statement configurations { db, InsertConfigurationsQuery.data() };
 
 		for (const auto & [key, value] : config.algorithms) {
-			metadata.bind("@simulation_id", static_cast<int>(config.simulation_id));
-			metadata.bind("@algorithm", key);
-			metadata.bind("@num_chunks", static_cast<int>(value.num_chunks));
-			metadata.bind("@sweeps_per_chunk", static_cast<int>(value.sweeps_per_chunk));
+			insert_metadata.bind("@simulation_id", static_cast<int>(config.simulation_id));
+			insert_metadata.bind("@algorithm", key);
+			insert_metadata.bind("@num_chunks", static_cast<int>(value.num_chunks));
+			insert_metadata.bind("@sweeps_per_chunk", static_cast<int>(value.sweeps_per_chunk));
 
-			const auto metadata_id = metadata.executeStep() ? metadata.getColumn(0).getInt() : -1;
-			metadata.reset();
+			insert_metadata.exec();
+			insert_metadata.reset();
+
+			fetch_metadata.bind("@simulation_id", static_cast<int>(config.simulation_id));
+			fetch_metadata.bind("@algorithm", key);
+
+			auto metadata_id = fetch_metadata.executeStep() ? fetch_metadata.getColumn(0).getInt() : -1;
+			fetch_metadata.reset();
 
 			for (const auto size : value.sizes) {
 				for (const auto temperature : utils::sweep_through_temperature(config.max_temperature, config.temperature_steps)) {
@@ -253,7 +263,7 @@ LEFT JOIN (
 ) k ON c.configuration_id = k.configuration_id
 WHERE s.simulation_id = @simulation_id AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
 	SELECT "worker_id" FROM "workers" WHERE "last_active_at" < datetime('now', '-5 minutes')
-)) AND IfNull(k.num_chunks, 0) + 1 < m.num_chunks
+)) AND IfNull(k.num_chunks, 0) < m.num_chunks
 ORDER BY IfNull(k.num_chunks, 0) ASC LIMIT 1;
 )~~~~~~";
 
@@ -306,43 +316,34 @@ INSERT INTO "chunks" (configuration_id, "index", worker_id, spins) VALUES (@conf
 )~~~~~~";
 
 constexpr std::string_view InsertResultQuery = R"~~~~~~(
-INSERT INTO "results" (chunk_id, type_id, "index", value) VALUES (@chunk_id, @type_id, @index, @value)
+INSERT INTO "results" (chunk_id, type_id, data) VALUES (@chunk_id, @type_id, @data)
 )~~~~~~";
 
 constexpr std::string_view RemoveWorkerQuery = R"~~~~~~(
 UPDATE "configurations" SET active_worker_id = NULL WHERE "configuration_id" = @configuration_id AND "active_worker_id" = @worker_id
 )~~~~~~";
 
-void SQLiteStorage::save_chunk(const Chunk & chunk, [[maybe_unused]] const std::vector<double> & spins, const observables::Map & results) {
+void SQLiteStorage::save_chunk(const Chunk & chunk, const std::span<uint8_t> & spins, const std::map<observables::Type, std::span<uint8_t>> & results) {
 	try {
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
-
-		flatbuffers::FlatBufferBuilder builder { sizeof(std::vector<double>) + sizeof(double) * spins.size() };
-		const auto offset = builder.CreateVector(spins.data(), spins.size());
-
-		const auto data = schemas::CreateSpins(builder, offset);
-		builder.Finish(data);
 
 		SQLite::Statement chunk_stmt { db, InsertChunkQuery.data() };
 		chunk_stmt.bind("@configuration_id", chunk.configuration_id);
 		chunk_stmt.bind("@index", chunk.index);
 		chunk_stmt.bind("@worker_id", worker_id);
-		chunk_stmt.bind("@spins", builder.GetBufferPointer(), static_cast<int>(builder.GetSize()));
+		chunk_stmt.bind("@spins", spins.data(), static_cast<int>(spins.size()));
 
 		auto chunk_id = -1;
 		while (chunk_stmt.executeStep()) chunk_id = chunk_stmt.getColumn(0).getInt();
 
 		SQLite::Statement result { db, InsertResultQuery.data() };
-		for (const auto & [key, measurements] : results) {
-			for (std::size_t i = 0; i < measurements.size(); ++i) {
-				result.bind("@chunk_id", chunk_id);
-				result.bind("@type_id", key);
-				result.bind("@index", static_cast<int>(i));
-				result.bind("@value", measurements[i]);
+		for (const auto & [key, data] : results) {
+			result.bind("@chunk_id", chunk_id);
+			result.bind("@type_id", key);
+			result.bind("@data", data.data(), static_cast<int>(data.size()));
 
-				result.exec();
-				result.reset();
-			}
+			result.exec();
+			result.reset();
 		}
 
 		SQLite::Statement worker_stmt { db, RemoveWorkerQuery.data() };

@@ -1,3 +1,3 @@
 #!/usr/bin/bash
 
-flatc --cpp -o "../include/schemas" spins.fbs
+flatc --cpp -o "../include/schemas" spins.fbs measurements.fbs

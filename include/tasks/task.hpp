@@ -49,10 +49,11 @@ namespace tasks {
 				}, *in).detach();
 
 				// Wait until one worker has finished and save the queue
-				while (workers== max_workers) {
+				while (workers == max_workers) {
 					workers.wait(max_workers);
 				}
 				save_queue(queue, queue_mutex);
+				storage->worker_keep_alive();
 			};
 
 			// Wait until all workers are finished and drain the remaining queue
