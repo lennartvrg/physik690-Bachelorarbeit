@@ -19,6 +19,10 @@ std::span<double> thermalize(const std::span<double> & data, const double tau) {
     return data.subspan(offset, std::ranges::size(data) - offset);
 }
 
+std::vector<double> analysis::thermalize_and_block(const std::span<double> & data, double tau) {
+    return blocking(thermalize(data, tau), tau);
+}
+
 double sample_with_replacement(std::mt19937 & rng, const std::vector<double> & data, const std::size_t n) {
     std::uniform_int_distribution<std::size_t> distrib {0, std::ranges::size(data) - 1};
     std::vector<double> draws (n);
@@ -28,7 +32,7 @@ double sample_with_replacement(std::mt19937 & rng, const std::vector<double> & d
 }
 
 std::tuple<double, double> analysis::bootstrap(std::mt19937 & rng, const std::span<double> & data, const double tau, const std::size_t n) {
-    const auto blocked = blocking(thermalize(data, tau), tau);
+    const auto blocked = thermalize_and_block(data, tau);
     const std::size_t count = std::ranges::size(blocked);
 
     std::vector<double> resamples (n);

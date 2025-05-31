@@ -77,3 +77,7 @@ std::tuple<double, double> Lattice::magnetization_diff(const std::size_t i, cons
 double Lattice::acceptance(const double energy_diff) const noexcept {
     return std::min(1.0, std::exp(-beta * energy_diff));
 }
+
+std::vector<double> Lattice::get_spins() const noexcept {
+    return { this->spins };
+}

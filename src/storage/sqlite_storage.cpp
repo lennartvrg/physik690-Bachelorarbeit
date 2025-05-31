@@ -65,7 +65,7 @@ BEGIN
 END;
 
 CREATE TABLE IF NOT EXISTS "configurations" (
-	configuration_ID		INTEGER				NOT NULL,
+	configuration_id		INTEGER				NOT NULL,
 
 	active_worker_id		INTEGER					NULL,
 	simulation_id			INTEGER				NOT NULL,
@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS "configurations" (
 	lattice_size			INTEGER				NOT NULL CHECK (lattice_size > 0),
 	temperature				REAL				NOT NULL CHECK (temperature > 0.0),
 
-	CONSTRAINT "PK.Configurations_ConfigurationId" PRIMARY KEY (configuration_ID AUTOINCREMENT),
+	CONSTRAINT "PK.Configurations_ConfigurationId" PRIMARY KEY (configuration_id AUTOINCREMENT),
 	CONSTRAINT "FK.Configurations_ActiveWorkerId" FOREIGN KEY (active_worker_id) REFERENCES "workers" (active_worker_id),
 	CONSTRAINT "FK.Configurations_SimulationId"	FOREIGN KEY (simulation_id) REFERENCES "simulations" (simulation_id),
 	CONSTRAINT "FK.Configurations_MetadataId" FOREIGN KEY (metadata_id) REFERENCES "metadata" (metadata_id)
@@ -103,17 +103,20 @@ INSERT OR IGNORE INTO "types" (type_id, name) VALUES (0, 'Energy'), (1, 'Energy 
 
 
 CREATE TABLE IF NOT EXISTS "chunks" (
+	chunk_id				INTEGER				NOT NULL,
+
 	configuration_id		INTEGER				NOT NULL,
 	"index"					INTEGER				NOT NULL,
 
 	worker_id				INTEGER				NOT NULL,
-	spins					TEXT				NOT NULL CHECK (json_valid(spins, 6) = 1 AND json_type(spins) = 'array'),
+	spins					BLOB				NOT NULL,
 
-	CONSTRAINT "PK.Chunks_ConfigurationId_Index" PRIMARY KEY ("configuration_id", "index"),
+	CONSTRAINT "PK.Chunks_ChunkId" PRIMARY KEY (chunk_id AUTOINCREMENT),
 	CONSTRAINT "FK.Chunks_ConfigurationId" FOREIGN KEY (configuration_id) REFERENCES "configurations" (configuration_id),
 	CONSTRAINT "FK.Chunks_WorkerId" FOREIGN KEY (worker_id) REFERENCES "workers" (worker_id)
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS "IX.Chunks_ConfigurationId_Index" ON "chunks" ("configuration_id", "index");
 
 CREATE TABLE IF NOT EXISTS "results" (
 	chunk_id				INTEGER				NOT NULL,
@@ -157,7 +160,7 @@ constexpr std::string_view RegisterWorkerQuery = R"~~~~~~(
 INSERT INTO "workers" (name) VALUES (@name) RETURNING "worker_id"
 )~~~~~~";
 
-SQLiteStorage::SQLiteStorage() : worker_id(-1), db("output/data.db", SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE | SQLite::OPEN_FULLMUTEX) {
+SQLiteStorage::SQLiteStorage(const std::string_view & path) : worker_id(-1), db(path, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE | SQLite::OPEN_FULLMUTEX) {
 	try {
 		db.setBusyTimeout(10000);
 		db.exec("PRAGMA synchronous = NORMAL");
@@ -236,17 +239,18 @@ void SQLiteStorage::prepare_simulation(const Config config) {
 }
 
 constexpr std::string_view NextChunkQuery = R"~~~~~~(
-SELECT c.configuration_ID, m.algorithm, c.lattice_size, c.temperature, m.sweeps_per_chunk, k.spins
+SELECT c.configuration_id, IfNull(k.num_chunks, 0) + 1, m.algorithm, c.lattice_size, c.temperature, m.sweeps_per_chunk, json(k.spins)
 FROM simulations s
 INNER JOIN configurations c on s.simulation_id = c.simulation_id
 INNER JOIN metadata m ON c.metadata_id = m.metadata_id
 LEFT JOIN (
     SELECT k.configuration_id, k.spins, MAX(k."index") AS num_chunks
     FROM chunks k
-) k ON c.configuration_ID = k.configuration_id AND IfNull(k.num_chunks, 0) < m.num_chunks
-WHERE s.simulation_id = ? AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
+	GROUP BY k.configuration_id
+) k ON c.configuration_id = k.configuration_id
+WHERE s.simulation_id = @simulation_id AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
 	SELECT "worker_id" FROM "workers" WHERE "last_active_at" < datetime('now', '-5 minutes')
-))
+)) AND IfNull(k.num_chunks, 0) + 1 < m.num_chunks
 ORDER BY c.lattice_size DESC LIMIT 1;
 )~~~~~~";
 
@@ -259,7 +263,7 @@ std::optional<Chunk> SQLiteStorage::next_chunk(const int simulation_id) {
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
 		SQLite::Statement next_chunk { db, NextChunkQuery.data() };
-		next_chunk.bind(1, simulation_id);
+		next_chunk.bind("@simulation_id", simulation_id);
 
 		if (!next_chunk.executeStep()) return std::nullopt;
 		const auto configuration_id = next_chunk.getColumn(0).getInt();
@@ -272,23 +276,94 @@ std::optional<Chunk> SQLiteStorage::next_chunk(const int simulation_id) {
 		transaction.commit();
 
 		std::optional<std::vector<double>> spins = std::nullopt;
-		if (!next_chunk.getColumn(5).isNull()) {
-			const auto str = next_chunk.getColumn(5).getString();
+		if (!next_chunk.getColumn(6).isNull()) {
+			const auto str = next_chunk.getColumn(6).getString();
 			const auto json = nlohmann::json::parse(str);
 			spins = std::optional(json.get<std::vector<double>>());
 		}
 
 		return std::optional<Chunk>({
 			next_chunk.getColumn(0).getInt(),
-			static_cast<algorithms::Algorithm>(next_chunk.getColumn(1).getInt()),
-			static_cast<std::size_t>(next_chunk.getColumn(2).getInt()),
-			next_chunk.getColumn(3).getDouble(),
-			static_cast<std::size_t>(next_chunk.getColumn(4).getInt()),
+			next_chunk.getColumn(1).getInt(),
+			static_cast<algorithms::Algorithm>(next_chunk.getColumn(2).getInt()),
+			static_cast<std::size_t>(next_chunk.getColumn(3).getInt()),
+			next_chunk.getColumn(4).getDouble(),
+			static_cast<std::size_t>(next_chunk.getColumn(5).getInt()),
 			spins
 		});
 
 	} catch (std::exception & e) {
-		std::cout << "SQLite exception: " << e.what() << std::endl;
+		std::cout << "Failed to fetch next chunk. SQLite exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
+}
+
+constexpr std::string_view InsertChunkQuery = R"~~~~~~(
+INSERT INTO "chunks" (configuration_id, "index", worker_id, spins) VALUES (@configuration_id, @chunk_id, @worker_id, jsonb(@spins)) RETURNING chunk_id
+)~~~~~~";
+
+constexpr std::string_view InsertResultQuery = R"~~~~~~(
+INSERT INTO "results" (chunk_id, type_id, "index", value) VALUES (@chunk_id, @type_id, @index, @value)
+)~~~~~~";
+
+constexpr std::string_view RemoveWorkerQuery = R"~~~~~~(
+UPDATE "configurations" SET active_worker_id = NULL WHERE "configuration_id" = @configuration_id AND "active_worker_id" = @worker_id
+)~~~~~~";
+
+void SQLiteStorage::save_chunk(const Chunk & chunk, [[maybe_unused]] const std::vector<double> & spins, const observables::Map & results) {
+	try {
+		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
+
+		SQLite::Statement chunk_stmt { db, InsertChunkQuery.data() };
+		chunk_stmt.bind("@configuration_id", chunk.configuration_id);
+		chunk_stmt.bind("@chunk_id", chunk.chunk_id);
+		chunk_stmt.bind("@spins", nlohmann::json { spins }.at(0).dump());
+		chunk_stmt.bind("@worker_id", worker_id);
+
+		auto chunk_id = -1;
+		while (chunk_stmt.executeStep()) chunk_id = chunk_stmt.getColumn(0).getInt();
+
+		SQLite::Statement result { db, InsertResultQuery.data() };
+		for (const auto & [key, measurements] : results) {
+			break;
+			for (std::size_t i = 0; i < measurements.size(); ++i) {
+				result.bind("@chunk_id", chunk_id);
+				result.bind("@type_id", key);
+				result.bind("@index", static_cast<int>(i));
+				result.bind("@value", measurements[i]);
+
+				result.exec();
+				result.reset();
+			}
+		}
+
+		SQLite::Statement worker_stmt { db, RemoveWorkerQuery.data() };
+		worker_stmt.bind("@configuration_id", chunk.configuration_id);
+		worker_stmt.bind("@worker_id", worker_id);
+		worker_stmt.exec();
+
+		transaction.commit();
+	} catch (std::exception & e) {
+		std::cout << "Failed to save chunk. SQLite exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
+}
+
+
+constexpr std::string_view UpdateWorkerLastActive = R"~~~~~~(
+UPDATE "workers" SET "last_active_at" = datetime() WHERE "worker_id" = @worker_id;
+)~~~~~~";
+
+void SQLiteStorage::worker_keep_alive() {
+	try {
+		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
+
+		SQLite::Statement worker { db, UpdateWorkerLastActive.data() };
+		worker.bind("@worker_id", worker_id);
+
+		transaction.commit();
+	} catch (std::exception & e) {
+		std::cout << "Failed to send worker keep alive. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
 	}
 }

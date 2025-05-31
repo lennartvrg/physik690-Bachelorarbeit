@@ -1,6 +1,9 @@
 #ifndef TYPE_HPP
 #define TYPE_HPP
 
+#include <map>
+#include <vector>
+
 namespace observables {
 	enum Type {
 		Energy = 0,
@@ -10,6 +13,8 @@ namespace observables {
 		MagnetizationSquared = 4,
 		MagneticSusceptibility = 5,
 	};
+
+	using Map = std::map<Type, std::vector<double>>;
 }
 
 #endif //TYPE_HPP

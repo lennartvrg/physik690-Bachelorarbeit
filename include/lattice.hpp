@@ -6,7 +6,7 @@
 
 class Lattice {
 public:
-    Lattice(std::size_t length, double beta, const std::optional<std::vector<double>>& spins);
+    Lattice(std::size_t length, double beta, const std::optional<std::vector<double>> & spins);
 
     [[nodiscard]] constexpr std::size_t side_length() const noexcept {
         return length;
@@ -31,6 +31,8 @@ public:
     [[nodiscard]] std::tuple<double, double> magnetization_diff(std::size_t i, double angle) const noexcept;
 
     [[nodiscard]] double acceptance(double energy_diff) const noexcept;
+
+    std::vector<double> get_spins() const noexcept;
 
 private:
     double beta;

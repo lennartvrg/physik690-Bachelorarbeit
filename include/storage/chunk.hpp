@@ -9,6 +9,8 @@
 struct Chunk {
 	const int configuration_id;
 
+	const int chunk_id;
+
 	const algorithms::Algorithm algorithm;
 
 	const std::size_t lattice_size;

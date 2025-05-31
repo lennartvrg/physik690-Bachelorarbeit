@@ -7,11 +7,15 @@
 
 class SQLiteStorage final : public Storage {
 public:
-	SQLiteStorage();
+	explicit SQLiteStorage(const std::string_view & path);
 
 	void prepare_simulation(Config config) override;
 
 	std::optional<Chunk> next_chunk(int simulation_id) override;
+
+	void save_chunk(const Chunk & chunk, const std::vector<double> & spins, const observables::Map & results) override;
+
+	void worker_keep_alive() override;
 
 private:
 	int worker_id;
