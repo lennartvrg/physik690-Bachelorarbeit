@@ -15,6 +15,10 @@ public:
 
 	void save_chunk(const Chunk & chunk, const std::span<uint8_t> & spins, const std::map<observables::Type, std::span<uint8_t>> & results) override;
 
+	std::optional<std::tuple<Estimate, std::vector<double>>> next_estimate(int simulation_id) override;
+
+	void save_estimate(const Estimate & estimate, double mean, double std_dev) override;
+
 	void worker_keep_alive() override;
 
 private:

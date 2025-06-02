@@ -2,8 +2,9 @@
 #define STORAGE_HPP
 
 #include "config.hpp"
-#include "chunk.hpp"
 #include "observables/type.hpp"
+#include "storage/estimate.hpp"
+#include "storage/chunk.hpp"
 
 class Storage {
 public:
@@ -14,6 +15,10 @@ public:
 	virtual std::optional<Chunk> next_chunk(int simulation_id) = 0;
 
 	virtual void save_chunk(const Chunk & chunk, const std::span<uint8_t> & spins, const std::map<observables::Type, std::span<uint8_t>> & results) = 0;
+
+	virtual std::optional<std::tuple<Estimate, std::vector<double>>> next_estimate(int simulation_id) = 0;
+
+	virtual void save_estimate(const Estimate & estimate, double mean, double std_dev) = 0;
 
 	virtual void worker_keep_alive() = 0;
 };

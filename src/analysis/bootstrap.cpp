@@ -31,8 +31,7 @@ double sample_with_replacement(std::mt19937 & rng, const std::vector<double> & d
     return std::ranges::fold_left(draws, 0.0, std::plus()) / static_cast<double>(draws.size());
 }
 
-std::tuple<double, double> analysis::bootstrap(std::mt19937 & rng, const std::span<double> & data, const double tau, const std::size_t n) {
-    const auto blocked = thermalize_and_block(data, tau);
+std::tuple<double, double> analysis::bootstrap_blocked(std::mt19937 & rng, const std::vector<double> & blocked, const std::size_t n) {
     const std::size_t count = std::ranges::size(blocked);
 
     std::vector<double> resamples (n);

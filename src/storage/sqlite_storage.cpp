@@ -5,6 +5,7 @@
 #include "utils/utils.hpp"
 #include "storage/sqlite_storage.hpp"
 
+#include "schemas/measurements_generated.h"
 #include "schemas/spins_generated.h"
 
 constexpr std::string_view Migrations = R"~~~~~~(
@@ -71,7 +72,7 @@ CREATE TABLE IF NOT EXISTS "configurations" (
 
 	active_worker_id		INTEGER					NULL,
 	simulation_id			INTEGER				NOT NULL,
-	metadata_id				INTEGER				NOT NULL CHECK (metadata_id >= 0),
+	metadata_id				INTEGER				NOT NULL,
 	lattice_size			INTEGER				NOT NULL CHECK (lattice_size > 0),
 	temperature				REAL				NOT NULL CHECK (temperature > 0.0),
 
@@ -358,6 +359,94 @@ void SQLiteStorage::save_chunk(const Chunk & chunk, const std::span<uint8_t> & s
 	}
 }
 
+constexpr std::string_view FetchNextEstimateQuery = R"~~~~~~(
+SELECT c.configuration_id, s.bootstrap_resamples, m.num_chunks, t.type_id
+FROM "simulations" s
+INNER JOIN "configurations" c ON c.simulation_id = s.simulation_id
+INNER JOIN "metadata" m ON c.metadata_id = m.metadata_id
+CROSS JOIN "types" t ON t.type_id IN (0, 3)
+LEFT JOIN "estimates" e ON e.configuration_id = c.configuration_id AND e.type_id = t.type_id
+WHERE s.simulation_id = @simulation_id AND c.active_worker_id IS NULL AND e.type_id IS NULL
+LIMIT 1
+)~~~~~~";
+
+constexpr std::string_view FetchConfigurationResults = R"~~~~~~(
+SELECT c."index", r.data
+FROM "chunks" c
+INNER JOIN "results" r ON c.chunk_id = r.chunk_id AND r.type_id = @type_id
+WHERE c.configuration_id = @configuration_id
+ORDER BY c."index"
+)~~~~~~";
+
+std::optional<std::tuple<Estimate, std::vector<double>>> SQLiteStorage::next_estimate(const int simulation_id) {
+	try {
+		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
+
+		SQLite::Statement estimate_stmt { db, FetchNextEstimateQuery.data() };
+		estimate_stmt.bind("@simulation_id", simulation_id);
+
+		if (!estimate_stmt.executeStep()) return std::nullopt;
+		const auto configuration_id = estimate_stmt.getColumn(0).getInt();
+		const auto bootstrap_resamples = static_cast<std::size_t>(estimate_stmt.getColumn(1).getInt());
+		const auto num_chunks = estimate_stmt.getColumn(2).getInt();
+		const auto type = static_cast<observables::Type>(estimate_stmt.getColumn(3).getInt());
+
+		SQLite::Statement worker { db, SetConfigurationActiveWorker.data() };
+		worker.bind("@configuration_id", configuration_id);
+		worker.bind("@worker_id", worker_id);
+		if (worker.exec() != 1) return std::nullopt;
+
+		SQLite::Statement result_stmt { db, FetchConfigurationResults.data() };
+		result_stmt.bind("@configuration_id", configuration_id);
+		result_stmt.bind("@type_id", type);
+
+		std::vector<double> values {};
+		while (result_stmt.executeStep()) {
+			const auto buffer = result_stmt.getColumn(1).getBlob();
+			const auto data = schemas::GetMeasurements(buffer);
+
+			values.reserve(data->data()->size() * num_chunks);
+			values.insert(values.end(), data->data()->begin(), data->data()->end());
+		}
+		transaction.commit();
+
+		if (values.empty()) {
+			std::cout << "No results found for " << configuration_id << " type " << type << std::endl;
+		}
+
+		return std::optional(std::make_tuple<Estimate, std::vector<double>>({ configuration_id, type, bootstrap_resamples }, std::move(values)));
+	} catch (std::exception & e) {
+		std::cout << "Failed to fetch next estimate. SQLite exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
+}
+
+constexpr std::string_view InsertEstimateQuery = R"~~~~~~(
+INSERT INTO "estimates" (configuration_id, type_id, mean, std_dev) VALUES (@configuration_id, @type_id, @mean, @std_dev)
+)~~~~~~";
+
+void SQLiteStorage::save_estimate(const Estimate & estimate, const double mean, const double std_dev) {
+	try {
+		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
+
+		SQLite::Statement estimate_stmt { db, InsertEstimateQuery.data() };
+		estimate_stmt.bind("@configuration_id", estimate.configuration_id);
+		estimate_stmt.bind("@type_id", estimate.type);
+		estimate_stmt.bind("@mean", mean);
+		estimate_stmt.bind("@std_dev", std_dev);
+		estimate_stmt.exec();
+
+		SQLite::Statement worker_stmt { db, RemoveWorkerQuery.data() };
+		worker_stmt.bind("@configuration_id", estimate.configuration_id);
+		worker_stmt.bind("@worker_id", worker_id);
+		worker_stmt.exec();
+
+		transaction.commit();
+	} catch (const std::exception & e) {
+		std::cout << "Failed to save estimate. SQLite exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
+}
 
 constexpr std::string_view UpdateWorkerLastActive = R"~~~~~~(
 UPDATE "workers" SET "last_active_at" = datetime() WHERE "worker_id" = @worker_id;
