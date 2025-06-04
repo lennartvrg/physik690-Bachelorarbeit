@@ -12,7 +12,7 @@ namespace utils {
 
 	std::vector<double> sweep_through_temperature(double max_temperature, std::size_t steps);
 
-	void write_output_csv(const std::ostringstream & measurements, const std::string & file_name, const std::string & headers);
+	std::vector<double> square_elements(const std::span<double> & span);
 }
 
 #endif //UTILS_HPP

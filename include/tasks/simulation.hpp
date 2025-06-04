@@ -12,6 +12,7 @@
 
 #include "schemas/spins_generated.h"
 #include "schemas/measurements_generated.h"
+#include "utils/utils.hpp"
 
 namespace tasks {
 	static algorithms::function sweeps[2] = { algorithms::metropolis, algorithms::wolff };
@@ -35,13 +36,19 @@ namespace tasks {
 			std::mt19937 rng {std::random_device{}()};
 
 			auto [energy, magnets] = algorithms::simulate(lattice, chunk.sweeps, rng, sweeps[chunk.algorithm]);
+			auto [energy_sqr, magnets_sqr] = std::make_tuple(utils::square_elements(energy), utils::square_elements(magnets));
 
 			const auto [e_tau, _1] = analysis::integrated_autocorrelation_time(energy);
 			const auto [m_tau, _2] = analysis::integrated_autocorrelation_time(magnets);
 
+			const auto [e_sqr_tau, _3] = analysis::integrated_autocorrelation_time(energy_sqr);
+			const auto [m_sqr_tau, _4] = analysis::integrated_autocorrelation_time(magnets_sqr);
+
 			return { lattice.get_spins(), {
-				{ observables::Type::Energy, analysis::thermalize_and_block(energy, e_tau) },
-				{ observables::Type::Magnetization, analysis::thermalize_and_block(magnets, m_tau) }
+				{ observables::Type::Energy, { e_tau, analysis::thermalize_and_block(energy, e_tau) } },
+				{ observables::Type::EnergySquared, { e_tau, analysis::thermalize_and_block(energy_sqr, e_sqr_tau) } },
+				{ observables::Type::Magnetization, { m_tau, analysis::thermalize_and_block(magnets, m_tau) } },
+				{ observables::Type::MagnetizationSquared, { m_tau, analysis::thermalize_and_block(magnets_sqr, m_sqr_tau) } }
 			}};
 		}
 
@@ -56,16 +63,18 @@ namespace tasks {
 			spin_builder.Finish(spins_offset);
 
 			std::vector<flatbuffers::FlatBufferBuilder> builders;
-			std::map<observables::Type, std::span<uint8_t>> results;
+			std::map<observables::Type, std::tuple<double, std::span<uint8_t>>> results;
 
-			for (const auto & [ type, values ] : measurements) {
+			for (const auto & [ type, value ] : measurements) {
+				const auto [tau, values] = value;
+
 				flatbuffers::FlatBufferBuilder result_builder { sizeof(std::vector<double>) + sizeof(double) * values.size() };
 				const auto result_offset = result_builder.CreateVector(values);
 
 				const auto measurements_offset = schemas::CreateMeasurements(result_builder, result_offset);
 				result_builder.Finish(measurements_offset);
 
-				results.insert({ type, result_builder.GetBufferSpan() });
+				results.insert({ type, { tau, result_builder.GetBufferSpan() } });
 				builders.push_back(std::move(result_builder));
 			}
 

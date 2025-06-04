@@ -4,6 +4,7 @@
 #include <simde/x86/sse2.h>
 #include <filesystem>
 #include <fstream>
+#include <ranges>
 
 #include "utils/utils.hpp"
 
@@ -33,12 +34,8 @@ std::vector<double> utils::sweep_through_temperature(const double max_temperatur
     return result;
 }
 
-void utils::write_output_csv(const std::ostringstream & measurements, const std::string & file_name, const std::string & headers) {
-    std::filesystem::create_directories("output");
-
-    std::ofstream output;
-    output.open("output/" + file_name + ".csv");
-
-    output << headers << std::endl << measurements.str();
-    output.close();
+std::vector<double> utils::square_elements(const std::span<double> & span) {
+    std::vector<double> result (span.size());
+    std::ranges::transform(span, result.begin(), [] (const double v) { return v * v; });
+    return result;
 }

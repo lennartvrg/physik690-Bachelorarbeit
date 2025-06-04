@@ -13,11 +13,13 @@ public:
 
 	std::optional<Chunk> next_chunk(int simulation_id) override;
 
-	void save_chunk(const Chunk & chunk, const std::span<uint8_t> & spins, const std::map<observables::Type, std::span<uint8_t>> & results) override;
+	void save_chunk(const Chunk & chunk, const std::span<uint8_t> & spins, const std::map<observables::Type, std::tuple<double, std::span<uint8_t>>> & results) override;
 
 	std::optional<std::tuple<Estimate, std::vector<double>>> next_estimate(int simulation_id) override;
 
-	void save_estimate(const Estimate & estimate, double mean, double std_dev) override;
+	std::optional<NextDerivative> next_derivative(int simulation_id) override;
+
+	void save_estimate(int configuration_id, observables::Type type, double mean, double std_dev) override;
 
 	void worker_keep_alive() override;
 

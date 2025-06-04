@@ -12,6 +12,7 @@ namespace tasks {
 		explicit Bootstrap(const Config & config, Args && ... args) : Task<TStorage, std::tuple<Estimate, std::vector<double>>, std::tuple<double, double>>(config, std::forward<Args>(args)...) {
 
 		}
+
 	protected:
 		std::optional<std::tuple<Estimate, std::vector<double>>> next_task() override {
 			return this->storage->next_estimate(this->config.simulation_id);
@@ -25,8 +26,11 @@ namespace tasks {
 		}
 
 		void save_task(const std::tuple<Estimate, std::vector<double>> & task, const std::tuple<double, double> & result) override {
-			std::cout << "ConfigurationId: " << get<0>(task).configuration_id << " | Type: " << get<0>(task).type << std::endl;
-			this->storage->save_estimate(get<0>(task), get<0>(result), get<1>(result));
+			const auto [estimate, _1] = task;
+			const auto [mean, std_dev] = result;
+
+			std::cout << "ConfigurationId: " << estimate.configuration_id << " | Type: " << estimate.type << std::endl;
+			this->storage->save_estimate(estimate.configuration_id, estimate.type, mean, std_dev);
 		}
 	};
 }

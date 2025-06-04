@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS "types" (
 	CONSTRAINT "PK.Types_TypeId" PRIMARY KEY (type_id)
 );
 
-INSERT OR IGNORE INTO "types" (type_id, name) VALUES (0, 'Energy'), (1, 'Energy Squared'), (2, 'Specific Heat'), (3, 'Magnetization'), (4, 'Magnetization Squared'), (5, 'Magnetic Susceptibility');
+INSERT OR IGNORE INTO "types" (type_id, name) VALUES (0, 'Energy'), (1, 'Energy Squared'), (2, 'Magnetization'), (3, 'Magnetization Squared'), (4, 'Specific Heat'), (5, 'Magnetic Susceptibility');
 
 
 CREATE TABLE IF NOT EXISTS "chunks" (
@@ -125,23 +125,12 @@ CREATE TABLE IF NOT EXISTS "results" (
 	chunk_id				INTEGER				NOT NULL,
 	type_id					INTEGER				NOT NULL,
 
+	tau						REAL				NOT NULL,
 	data					BLOB				NOT NULL,
 
 	CONSTRAINT "PK.Results_ChunkId_TypeId_Index" PRIMARY KEY (chunk_id, type_id),
 	CONSTRAINT "FK.Results_ChunkId" FOREIGN KEY (chunk_id) REFERENCES "chunks" (chunk_id),
 	CONSTRAINT "FK.Results_TypeId" FOREIGN KEY (type_id) REFERENCES "types" (type_id)
-);
-
-
-CREATE TABLE IF NOT EXISTS "autocorrelation" (
-	configuration_id		INTEGER				NOT NULL,
-	type_id					INTEGER				NOT NULL,
-
-	tau						REAL				NOT NULL,
-
-	CONSTRAINT "PK.Autocorrelation_ConfigurationId_TypeId" PRIMARY KEY (configuration_id, type_id),
-	CONSTRAINT "FK.Autocorrelation_ConfigurationId" FOREIGN KEY (configuration_id) REFERENCES "configurations" (configuration_id),
-	CONSTRAINT "FK.Autocorrelation_TypeId" FOREIGN KEY (type_id) REFERENCES "types" (type_id)
 );
 
 
@@ -317,14 +306,14 @@ INSERT INTO "chunks" (configuration_id, "index", worker_id, spins) VALUES (@conf
 )~~~~~~";
 
 constexpr std::string_view InsertResultQuery = R"~~~~~~(
-INSERT INTO "results" (chunk_id, type_id, data) VALUES (@chunk_id, @type_id, @data)
+INSERT INTO "results" (chunk_id, type_id, tau, data) VALUES (@chunk_id, @type_id, @tau, @data)
 )~~~~~~";
 
 constexpr std::string_view RemoveWorkerQuery = R"~~~~~~(
 UPDATE "configurations" SET active_worker_id = NULL WHERE "configuration_id" = @configuration_id AND "active_worker_id" = @worker_id
 )~~~~~~";
 
-void SQLiteStorage::save_chunk(const Chunk & chunk, const std::span<uint8_t> & spins, const std::map<observables::Type, std::span<uint8_t>> & results) {
+void SQLiteStorage::save_chunk(const Chunk & chunk, const std::span<uint8_t> & spins, const std::map<observables::Type, std::tuple<double, std::span<uint8_t>>> & results) {
 	try {
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
@@ -338,9 +327,11 @@ void SQLiteStorage::save_chunk(const Chunk & chunk, const std::span<uint8_t> & s
 		while (chunk_stmt.executeStep()) chunk_id = chunk_stmt.getColumn(0).getInt();
 
 		SQLite::Statement result { db, InsertResultQuery.data() };
-		for (const auto & [key, data] : results) {
+		for (const auto & [key, value] : results) {
+			const auto [tau, data] = value;
 			result.bind("@chunk_id", chunk_id);
 			result.bind("@type_id", key);
+			result.bind("@tau", tau);
 			result.bind("@data", data.data(), static_cast<int>(data.size()));
 
 			result.exec();
@@ -364,7 +355,7 @@ SELECT c.configuration_id, s.bootstrap_resamples, m.num_chunks, t.type_id
 FROM "simulations" s
 INNER JOIN "configurations" c ON c.simulation_id = s.simulation_id
 INNER JOIN "metadata" m ON c.metadata_id = m.metadata_id
-CROSS JOIN "types" t ON t.type_id IN (0, 3)
+CROSS JOIN "types" t ON t.type_id BETWEEN 0 AND 3
 LEFT JOIN "estimates" e ON e.configuration_id = c.configuration_id AND e.type_id = t.type_id
 WHERE s.simulation_id = @simulation_id AND c.active_worker_id IS NULL AND e.type_id IS NULL
 LIMIT 1
@@ -425,25 +416,63 @@ constexpr std::string_view InsertEstimateQuery = R"~~~~~~(
 INSERT INTO "estimates" (configuration_id, type_id, mean, std_dev) VALUES (@configuration_id, @type_id, @mean, @std_dev)
 )~~~~~~";
 
-void SQLiteStorage::save_estimate(const Estimate & estimate, const double mean, const double std_dev) {
+void SQLiteStorage::save_estimate(const int configuration_id, const observables::Type type, const double mean, const double std_dev) {
 	try {
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
 		SQLite::Statement estimate_stmt { db, InsertEstimateQuery.data() };
-		estimate_stmt.bind("@configuration_id", estimate.configuration_id);
-		estimate_stmt.bind("@type_id", estimate.type);
+		estimate_stmt.bind("@configuration_id", configuration_id);
+		estimate_stmt.bind("@type_id", type);
 		estimate_stmt.bind("@mean", mean);
 		estimate_stmt.bind("@std_dev", std_dev);
 		estimate_stmt.exec();
 
 		SQLite::Statement worker_stmt { db, RemoveWorkerQuery.data() };
-		worker_stmt.bind("@configuration_id", estimate.configuration_id);
+		worker_stmt.bind("@configuration_id", configuration_id);
 		worker_stmt.bind("@worker_id", worker_id);
 		worker_stmt.exec();
 
 		transaction.commit();
 	} catch (const std::exception & e) {
 		std::cout << "Failed to save estimate. SQLite exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
+}
+
+constexpr std::string_view FetchNextDerivativeQuery = R"~~~~~~(
+SELECT e.configuration_id, e.type_id, c.temperature, e.mean, o.mean
+FROM "estimates" e
+INNER JOIN "configurations" c ON e.configuration_id = c.configuration_id AND c.simulation_id = @simulation_id AND c.active_worker_id IS NULL
+INNER JOIN "estimates" o ON e.configuration_id = o.configuration_id AND o.type_id = CASE WHEN e.type_id BETWEEN 0 AND 1 THEN mod(e.type_id + 1, 2) ELSE mod(e.type_id - 1, 2) + 2 END
+LEFT JOIN "estimates" t ON e.configuration_id = t.configuration_id AND t.type_id = CASE WHEN e.type_id BETWEEN 0 AND 1 THEN 4 ELSE 5 END
+WHERE (e.type_id BETWEEN 0 AND 3) AND (t.configuration_id IS NULL)
+LIMIT 1
+)~~~~~~";
+
+std::optional<NextDerivative> SQLiteStorage::next_derivative(const int simulation_id) {
+	try {
+		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
+
+		SQLite::Statement next_derivative_stmt { db, FetchNextDerivativeQuery.data() };
+		next_derivative_stmt.bind("@simulation_id", simulation_id);
+
+		if (!next_derivative_stmt.executeStep()) return std::nullopt;
+		const auto configuration_id = next_derivative_stmt.getColumn(0).getInt();
+		const auto type = static_cast<observables::Type>(next_derivative_stmt.getColumn(1).getInt());
+		const auto temperature = next_derivative_stmt.getColumn(2).getDouble();
+		const auto mean = next_derivative_stmt.getColumn(3).getDouble();
+		const auto sqr_mean = next_derivative_stmt.getColumn(4).getDouble();
+
+		SQLite::Statement worker { db, SetConfigurationActiveWorker.data() };
+		worker.bind("@configuration_id", configuration_id);
+		worker.bind("@worker_id", worker_id);
+
+		if (worker.exec() != 1) return std::nullopt;
+		transaction.commit();
+
+		return { { configuration_id, type, temperature, mean, sqr_mean } };
+	} catch (const std::exception & e) {
+		std::cout << "Failed to fetch next derivative. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
 	}
 }

@@ -8,13 +8,13 @@ namespace observables {
 	enum Type {
 		Energy = 0,
 		EnergySquared = 1,
-		SpecificHeat = 2,
-		Magnetization = 3,
-		MagnetizationSquared = 4,
+		Magnetization = 2,
+		MagnetizationSquared = 3,
+		SpecificHeat = 4,
 		MagneticSusceptibility = 5,
 	};
 
-	using Map = std::map<Type, std::vector<double>>;
+	using Map = std::map<Type, std::tuple<double, std::vector<double>>>;
 }
 
 #endif //TYPE_HPP
