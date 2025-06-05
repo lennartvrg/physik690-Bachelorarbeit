@@ -20,6 +20,10 @@ struct Chunk final {
 	const std::size_t sweeps;
 
 	std::optional<std::vector<double>> spins;
+
+	bool skip_thermalization() const {
+		return index > 1;
+	}
 };
 
 #endif //CHUNK_HPP

@@ -45,10 +45,10 @@ namespace tasks {
 			const auto [m_sqr_tau, _4] = analysis::integrated_autocorrelation_time(magnets_sqr);
 
 			return { lattice.get_spins(), {
-				{ observables::Type::Energy, { e_tau, analysis::thermalize_and_block(energy, e_tau) } },
-				{ observables::Type::EnergySquared, { e_tau, analysis::thermalize_and_block(energy_sqr, e_sqr_tau) } },
-				{ observables::Type::Magnetization, { m_tau, analysis::thermalize_and_block(magnets, m_tau) } },
-				{ observables::Type::MagnetizationSquared, { m_tau, analysis::thermalize_and_block(magnets_sqr, m_sqr_tau) } }
+				{ observables::Type::Energy, { e_tau, analysis::thermalize_and_block(energy, e_tau, chunk.skip_thermalization()) } },
+				{ observables::Type::EnergySquared, { e_tau, analysis::thermalize_and_block(energy_sqr, e_sqr_tau, chunk.skip_thermalization()) } },
+				{ observables::Type::Magnetization, { m_tau, analysis::thermalize_and_block(magnets, m_tau, chunk.skip_thermalization()) } },
+				{ observables::Type::MagnetizationSquared, { m_tau, analysis::thermalize_and_block(magnets_sqr, m_sqr_tau, chunk.skip_thermalization()) } }
 			}};
 		}
 

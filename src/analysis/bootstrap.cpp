@@ -19,8 +19,8 @@ std::span<double> thermalize(const std::span<double> & data, const double tau) {
     return data.subspan(offset, std::ranges::size(data) - offset);
 }
 
-std::vector<double> analysis::thermalize_and_block(const std::span<double> & data, double tau) {
-    return blocking(thermalize(data, tau), tau);
+std::vector<double> analysis::thermalize_and_block(const std::span<double> & data, const double tau, const bool skip_thermalization) {
+    return blocking(skip_thermalization ? data : thermalize(data, tau), tau);
 }
 
 double sample_with_replacement(std::mt19937 & rng, const std::vector<double> & data, const std::size_t n) {

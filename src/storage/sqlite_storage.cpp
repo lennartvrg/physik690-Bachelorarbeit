@@ -440,7 +440,7 @@ void SQLiteStorage::save_estimate(const int configuration_id, const observables:
 }
 
 constexpr std::string_view FetchNextDerivativeQuery = R"~~~~~~(
-SELECT e.configuration_id, e.type_id, c.temperature, e.mean, o.mean
+SELECT e.configuration_id, e.type_id, c.temperature, e.mean, e.std_dev, o.mean, o.std_dev
 FROM "estimates" e
 INNER JOIN "configurations" c ON e.configuration_id = c.configuration_id AND c.simulation_id = @simulation_id AND c.active_worker_id IS NULL
 INNER JOIN "estimates" o ON e.configuration_id = o.configuration_id AND o.type_id = CASE WHEN e.type_id BETWEEN 0 AND 1 THEN mod(e.type_id + 1, 2) ELSE mod(e.type_id - 1, 2) + 2 END
@@ -461,7 +461,9 @@ std::optional<NextDerivative> SQLiteStorage::next_derivative(const int simulatio
 		const auto type = static_cast<observables::Type>(next_derivative_stmt.getColumn(1).getInt());
 		const auto temperature = next_derivative_stmt.getColumn(2).getDouble();
 		const auto mean = next_derivative_stmt.getColumn(3).getDouble();
-		const auto sqr_mean = next_derivative_stmt.getColumn(4).getDouble();
+		const auto std_dev = next_derivative_stmt.getColumn(4).getDouble();
+		const auto square_mean = next_derivative_stmt.getColumn(5).getDouble();
+		const auto square_std_dev = next_derivative_stmt.getColumn(6).getDouble();
 
 		SQLite::Statement worker { db, SetConfigurationActiveWorker.data() };
 		worker.bind("@configuration_id", configuration_id);
@@ -470,7 +472,7 @@ std::optional<NextDerivative> SQLiteStorage::next_derivative(const int simulatio
 		if (worker.exec() != 1) return std::nullopt;
 		transaction.commit();
 
-		return { { configuration_id, type, temperature, mean, sqr_mean } };
+		return { { configuration_id, type, temperature, mean, std_dev, square_mean, square_std_dev } };
 	} catch (const std::exception & e) {
 		std::cout << "Failed to fetch next derivative. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());

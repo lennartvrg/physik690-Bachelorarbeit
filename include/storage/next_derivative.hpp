@@ -12,7 +12,11 @@ struct NextDerivative {
 
 	const double mean;
 
+	const double std_dev;
+
 	const double square_mean;
+
+	const double square_std_dev;
 };
 
 #endif //DERIVATIVE_HPP
