@@ -6,9 +6,9 @@
 #include <random>
 
 namespace analysis {
-    std::vector<double> thermalize_and_block(const std::span<double> & data, double tau, bool skip_thermalization = false);
+    std::vector<double_t> thermalize_and_block(const std::span<double_t> & data, double_t tau, bool skip_thermalization = false);
 
-    std::tuple<double, double> bootstrap_blocked(std::mt19937 &rng, const std::vector<double> & blocked, std::size_t n);
+    std::tuple<double_t, double_t> bootstrap_blocked(std::mt19937 &rng, const std::vector<double_t> & blocked, std::size_t n);
 }
 
 #endif //BOOSTRAP_HPP

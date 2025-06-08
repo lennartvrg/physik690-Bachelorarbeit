@@ -19,7 +19,7 @@ struct Config {
 	const std::size_t simulation_id;
 	const std::size_t bootstrap_resamples;
 
-	const double max_temperature;
+	const double_t max_temperature;
 	const std::size_t temperature_steps;
 
 	const std::map<algorithms::Algorithm, AlgorithmConfig> algorithms;

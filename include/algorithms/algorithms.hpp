@@ -15,21 +15,21 @@ namespace algorithms {
      *
      * @tparam N The factor of PI
      */
-    template<const std::size_t N> constexpr double N_PI = N * std::numbers::pi;
+    template<const std::size_t N> constexpr double_t N_PI = N * std::numbers::pi;
 
     /**
      * The acceptance probability on the uniform distribution [0.0, 1.0).
      */
-    static thread_local std::uniform_real_distribution ACCEPTANCE {0.0, 1.0};
+    static thread_local std::uniform_real_distribution<> ACCEPTANCE {0.0, 1.0};
 
     /**
      * The random angle on the uniform distribution [0, 2PI)
      */
     static thread_local std::uniform_real_distribution ANGLE {0.0, N_PI<2>};
 
-    using function = std::function<std::tuple<double, std::tuple<double, double>>(Lattice&, std::mt19937&)>;
+    using function = std::function<std::tuple<double_t, std::tuple<double_t, double_t>>(Lattice&, std::mt19937&)>;
 
-    std::tuple<std::vector<double>, std::vector<double>> simulate(Lattice & lattice, std::size_t sweeps, std::mt19937 &rng, const function &sweep) noexcept;
+    std::tuple<std::vector<double_t>, std::vector<double_t>> simulate(Lattice & lattice, std::size_t sweeps, std::mt19937 & rng, const function & sweep) noexcept;
 }
 
 #endif //ALGORITHM_HPP

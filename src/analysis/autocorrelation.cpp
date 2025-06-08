@@ -10,11 +10,11 @@
 
 static std::mutex mtx;
 
-static std::complex<double> fold(const std::complex<double> x) {
+static std::complex<double_t> fold(const std::complex<double_t> x) {
 	return x * std::conj(x);
 }
 
-static void discrete_fourier_transform(std::span<std::complex<double>> in, std::span<std::complex<double>> out, const int direction) {
+static void discrete_fourier_transform(const std::span<std::complex<double_t>> & in, const std::span<std::complex<double_t>> & out, const int direction) {
 	std::unique_lock lock {mtx};
 	const auto p = fftw_plan_dft_1d(static_cast<int>(in.size()), reinterpret_cast<fftw_complex*>(&in[0]), reinterpret_cast<fftw_complex*>(&out[0]), direction, FFTW_ESTIMATE);
 	lock.unlock();
@@ -23,33 +23,35 @@ static void discrete_fourier_transform(std::span<std::complex<double>> in, std::
 	fftw_destroy_plan(p);
 }
 
-std::vector<double> normalized_autocorrelation_function(const std::span<double> & data) {
+std::vector<double_t> normalized_autocorrelation_function(const std::span<double_t> & data) {
 	assert(!data.empty() && "Input data must not be empty");
-	const auto mean = std::ranges::fold_left(data, 0.0, std::plus()) / static_cast<double>(data.size());
+	const auto mean = std::ranges::fold_left(data, 0.0, std::plus()) / static_cast<double_t>(data.size());
 
-	std::vector<std::complex<double>> in (data.size()), out (data.size());
+	std::vector<std::complex<double_t>> in (data.size()), out (data.size());
 	std::ranges::transform(data, in.begin(), [&] (const auto x) {
-		return std::complex<double>(x - mean, 0.0);
+		return std::complex<double_t>(x - mean, 0.0);
 	});
 
 	discrete_fourier_transform(in, out, FFTW_FORWARD);
 	std::ranges::transform(out, out.begin(), fold);
-	discrete_fourier_transform(out, in, FFTW_BACKWARD);
 
-	std::vector<double> result (data.size());
+	discrete_fourier_transform(out, in, FFTW_BACKWARD);
+	const auto norm = 1.0 / in[0].real();
+
+	std::vector<double_t> result (data.size());
 	std::ranges::transform(in, result.begin(), [&] (const auto c) {
-		return c.real() / in[0].real();
+		return c.real() * norm;
 	});
 
 	return result;
 }
 
-std::tuple<double, std::vector<double>> analysis::integrated_autocorrelation_time(const std::span<double> & data) {
+std::tuple<double_t, std::vector<double_t>> analysis::integrated_autocorrelation_time(const std::span<double_t> & data) {
 	const auto correlation = normalized_autocorrelation_function(data);
-	const auto positive = correlation | std::ranges::views::drop(1) | std::ranges::views::take_while([] (const double x) {
+	const auto positive = correlation | std::ranges::views::drop(1) | std::ranges::views::take_while([] (const double_t x) {
 		return x > 0.0;
 	});
 
-	const auto tau = 0.5 + std::ranges::fold_left(positive, 0.0, [] (const double sum, const double c) { return sum + c; });
+	const auto tau = 0.5 + std::ranges::fold_left(positive, 0.0, std::plus());
 	return {tau, correlation};
 }

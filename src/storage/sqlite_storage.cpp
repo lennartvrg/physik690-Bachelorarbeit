@@ -8,101 +8,40 @@
 #include "schemas/measurements_generated.h"
 #include "schemas/spins_generated.h"
 
-constexpr std::string_view Migrations = R"~~~~~~(
-CREATE TABLE IF NOT EXISTS "simulations" (
-	simulation_id			INTEGER				NOT NULL,
+#include "migrations.cpp"
 
-	bootstrap_resamples		INTEGER				NOT NULL DEFAULT (100000) CHECK (bootstrap_resamples > 0),
-	created_at				DATETIME			NOT NULL DEFAULT (datetime()),
-
-	CONSTRAINT "PK.Simulations_SimulationId" PRIMARY KEY (simulation_id)
-);
-
-CREATE TRIGGER IF NOT EXISTS "TRG.ClearEstimates"
-AFTER UPDATE OF "bootstrap_resamples" ON "simulations"
-FOR EACH ROW WHEN OLD."bootstrap_resamples" != NEW."bootstrap_resamples"
-BEGIN
-	DELETE FROM "estimates" WHERE "configuration_id" IN (
-		SELECT "configuration_id" FROM "configurations"
-		WHERE "simulation_id" = NEW."simulation_id"
-	);
-END;
-
-CREATE TABLE IF NOT EXISTS "metadata" (
-	metadata_id				INTEGER				NOT NULL,
-
-	simulation_id			INTEGER				NOT NULL,
-	algorithm				INTEGER				NOT NULL CHECK (algorithm = 0 OR algorithm = 1),
-	num_chunks				INTEGER				NOT NULL DEFAULT (10) CHECK (num_chunks > 0),
-	sweeps_per_chunk		INTEGER				NOT NULL DEFAULT (100000) CHECK (sweeps_per_chunk > 0),
-
-	CONSTRAINT "PK.Metadata_SimulationId" PRIMARY KEY (metadata_id AUTOINCREMENT),
-	CONSTRAINT "FK.Metadata_SimulationId" FOREIGN KEY (simulation_id) REFERENCES "simulations" (simulation_id)
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS "IX.Metadata_SimulationId_Algorithm" ON "metadata" (simulation_id, algorithm);
-
-CREATE TABLE IF NOT EXISTS "workers" (
-	worker_id				INTEGER				NOT NULL,
-
-	name					TEXT				NOT NULL CHECK (length(name) > 0),
-	last_active_at			DATETIME			NOT NULL DEFAULT (datetime()),
-
-	CONSTRAINT "PK.Workers_WorkerId" PRIMARY KEY (worker_id AUTOINCREMENT)
-);
-
-CREATE INDEX IF NOT EXISTS "IX.Workers_LastActiveAt" ON "workers" (last_active_at);
-
+constexpr std::string_view SQLITE_MIGRATIONS = R"~~~~~~(
 CREATE TRIGGER IF NOT EXISTS "TRG.RemoveInactiveWorkers"
 AFTER INSERT ON "workers" FOR EACH ROW
 BEGIN
 	UPDATE "configurations" SET "active_worker_id" = NULL WHERE "active_worker_id" IN (
-		SELECT "worker_id" FROM "workers" WHERE "last_active_at" < datetime('now', '-5 minutes')
+		SELECT "worker_id" FROM "workers" WHERE "last_active_at" < unixepoch('now', '-5 minutes')
 	);
 
 	DELETE FROM "workers" WHERE NOT EXISTS (
 		SELECT * FROM "configurations" c WHERE c."active_worker_id" = "worker_id"
 	) AND NOT EXISTS (
 		SELECT * FROM "chunks" c WHERE c."worker_id" = "worker_id"
-	) AND "last_active_at" < datetime('now', '-5 minutes');
+	) AND "last_active_at" < unixepoch('now', '-5 minutes');
 END;
 
-CREATE TABLE IF NOT EXISTS "configurations" (
-	configuration_id		INTEGER				NOT NULL,
-
-	active_worker_id		INTEGER					NULL,
-	simulation_id			INTEGER				NOT NULL,
-	metadata_id				INTEGER				NOT NULL,
-	lattice_size			INTEGER				NOT NULL CHECK (lattice_size > 0),
-	temperature				REAL				NOT NULL CHECK (temperature > 0.0),
-
-	CONSTRAINT "PK.Configurations_ConfigurationId" PRIMARY KEY (configuration_id AUTOINCREMENT),
-	CONSTRAINT "FK.Configurations_ActiveWorkerId" FOREIGN KEY (active_worker_id) REFERENCES "workers" (worker_id),
-	CONSTRAINT "FK.Configurations_SimulationId"	FOREIGN KEY (simulation_id) REFERENCES "simulations" (simulation_id),
-	CONSTRAINT "FK.Configurations_MetadataId" FOREIGN KEY (metadata_id) REFERENCES "metadata" (metadata_id)
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS "IX.Configurations_MetadataId_Algorithm_LatticeSize_Temperature" ON "configurations" (simulation_id, metadata_id, lattice_size, temperature);
-
-CREATE INDEX IF NOT EXISTS "IX.Configurations_ActiveWorkerId" ON "configurations" (active_worker_id);
 
 CREATE TRIGGER IF NOT EXISTS "TRG.UpdateWorkerLastActive"
 AFTER UPDATE OF "active_worker_id" ON "configurations"
 FOR EACH ROW WHEN NEW."active_worker_id" IS NOT NULL
 BEGIN
-	UPDATE "workers" SET "last_active_at" = datetime() WHERE "worker_id" = NEW."active_worker_id";
+	UPDATE "workers" SET "last_active_at" = unixepoch() WHERE "worker_id" = NEW."active_worker_id";
 END;
 
-
-CREATE TABLE IF NOT EXISTS "types" (
+CREATE TABLE IF NOT EXISTS "autocorrelation" (
+	autocorrelation_id		INTEGER				NOT NULL,
 	type_id					INTEGER				NOT NULL,
 
-	name					TEXT				NOT NULL,
+	data					BYTEA				NOT NULL,
 
-	CONSTRAINT "PK.Types_TypeId" PRIMARY KEY (type_id)
+	CONSTRAINT "PK.Autocorrelation_AutocorrelationId_TypeId" PRIMARY KEY (autocorrelation_id, type_id),
+	CONSTRAINT "FK.Autocorrelation_TypeId" FOREIGN KEY (type_id) REFERENCES "types" (type_id)
 );
-
-INSERT OR IGNORE INTO "types" (type_id, name) VALUES (0, 'Energy'), (1, 'Energy Squared'), (2, 'Magnetization'), (3, 'Magnetization Squared'), (4, 'Specific Heat'), (5, 'Magnetic Susceptibility');
 
 
 CREATE TABLE IF NOT EXISTS "chunks" (
@@ -111,15 +50,18 @@ CREATE TABLE IF NOT EXISTS "chunks" (
 	configuration_id		INTEGER				NOT NULL,
 	"index"					INTEGER				NOT NULL,
 
+	autocorrelation_id		INTEGER					NULL CHECK ((autocorrelation_id != NULL AND "index" = 0) OR (autocorrelation_id = NULL AND "index" != 0)),
 	worker_id				INTEGER				NOT NULL,
+	time_ms					INTEGER				NOT NULL CHECK (time_ms >= 0),
 	spins					BLOB				NOT NULL,
 
-	CONSTRAINT "PK.Chunks_ChunkId" PRIMARY KEY (chunk_id AUTOINCREMENT),
+	CONSTRAINT "PK.Chunks_ChunkId" PRIMARY KEY (chunk_id),
 	CONSTRAINT "FK.Chunks_ConfigurationId" FOREIGN KEY (configuration_id) REFERENCES "configurations" (configuration_id),
 	CONSTRAINT "FK.Chunks_WorkerId" FOREIGN KEY (worker_id) REFERENCES "workers" (worker_id)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS "IX.Chunks_ConfigurationId_Index" ON "chunks" ("configuration_id", "index");
+
 
 CREATE TABLE IF NOT EXISTS "results" (
 	chunk_id				INTEGER				NOT NULL,
@@ -132,23 +74,10 @@ CREATE TABLE IF NOT EXISTS "results" (
 	CONSTRAINT "FK.Results_ChunkId" FOREIGN KEY (chunk_id) REFERENCES "chunks" (chunk_id),
 	CONSTRAINT "FK.Results_TypeId" FOREIGN KEY (type_id) REFERENCES "types" (type_id)
 );
-
-
-CREATE TABLE IF NOT EXISTS "estimates" (
-	configuration_id		INTEGER				NOT NULL,
-	type_id					INTEGER				NOT NULL,
-
-	mean					REAL				NOT NULL,
-	std_dev					REAL				NOT NULL,
-
-	CONSTRAINT "PK.Estimates_ConfigurationId_TypeId" PRIMARY KEY (configuration_id, type_id),
-	CONSTRAINT "FK.Estimates_ConfigurationId" FOREIGN KEY (configuration_id) REFERENCES "configurations" (configuration_id),
-	CONSTRAINT "FK.Estimates_TypeId" FOREIGN KEY (type_id) REFERENCES "types" (type_id)
-);
 )~~~~~~";
 
 constexpr std::string_view RegisterWorkerQuery = R"~~~~~~(
-INSERT INTO "workers" (name) VALUES (@name) RETURNING "worker_id"
+INSERT INTO "workers" (name, last_active_at) VALUES (@name, @last_active_at) RETURNING "worker_id"
 )~~~~~~";
 
 SQLiteStorage::SQLiteStorage(const std::string_view & path) : worker_id(-1), db(path, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE | SQLite::OPEN_FULLMUTEX) {
@@ -158,10 +87,12 @@ SQLiteStorage::SQLiteStorage(const std::string_view & path) : worker_id(-1), db(
 		db.exec("PRAGMA synchronous = NORMAL");
 
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
-		db.exec(Migrations.data());
+		db.exec(MIGRATIONS.data());
+		db.exec(SQLITE_MIGRATIONS.data());
 
 		SQLite::Statement worker { db, RegisterWorkerQuery.data() };
 		worker.bind("@name", utils::hostname());
+		worker.bind("@last_active_at", utils::timestamp_ms());
 
 		while (worker.executeStep()) {
 			worker_id = worker.getColumn(0).getInt();
@@ -175,7 +106,7 @@ SQLiteStorage::SQLiteStorage(const std::string_view & path) : worker_id(-1), db(
 }
 
 constexpr std::string_view InsertSimulationQuery = R"~~~~~~(
-INSERT INTO "simulations" (simulation_id, bootstrap_resamples) VALUES (@simulation_id, @bootstrap_resamples)
+INSERT INTO "simulations" (simulation_id, bootstrap_resamples, created_at) VALUES (@simulation_id, @bootstrap_resamples, @created_at)
 ON CONFLICT DO UPDATE SET bootstrap_resamples = @bootstrap_resamples
 )~~~~~~";
 
@@ -200,6 +131,7 @@ void SQLiteStorage::prepare_simulation(const Config config) {
 		SQLite::Statement simulation { db, InsertSimulationQuery.data() };
 		simulation.bind("@simulation_id", static_cast<int>(config.simulation_id));
 		simulation.bind("@bootstrap_resamples", static_cast<int>(config.bootstrap_resamples));
+		simulation.bind("@created_at", utils::timestamp_ms());
 		simulation.exec();
 
 		SQLite::Statement insert_metadata { db, InsertMetadataQuery.data() };
@@ -252,7 +184,7 @@ LEFT JOIN (
 	GROUP BY k.configuration_id
 ) k ON c.configuration_id = k.configuration_id
 WHERE s.simulation_id = @simulation_id AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
-	SELECT "worker_id" FROM "workers" WHERE "last_active_at" < datetime('now', '-5 minutes')
+	SELECT "worker_id" FROM "workers" WHERE "last_active_at" < unixepoch('now', '-5 minutes')
 )) AND IfNull(k.num_chunks, 0) < m.num_chunks
 ORDER BY IfNull(k.num_chunks, 0) ASC LIMIT 1;
 )~~~~~~";
@@ -278,7 +210,7 @@ std::optional<Chunk> SQLiteStorage::next_chunk(const int simulation_id) {
 		if (worker.exec() != 1) return std::nullopt;
 		transaction.commit();
 
-		std::optional<std::vector<double>> spins = std::nullopt;
+		std::optional<std::vector<double_t>> spins = std::nullopt;
 		if (!next_chunk.getColumn(6).isNull()) {
 			const auto buffer = next_chunk.getColumn(6).getBlob();
 			const auto data = schemas::GetSpins(buffer);
@@ -302,7 +234,7 @@ std::optional<Chunk> SQLiteStorage::next_chunk(const int simulation_id) {
 }
 
 constexpr std::string_view InsertChunkQuery = R"~~~~~~(
-INSERT INTO "chunks" (configuration_id, "index", worker_id, spins) VALUES (@configuration_id, @index, @worker_id, @spins) RETURNING chunk_id
+INSERT INTO "chunks" (configuration_id, "index", time_ms, worker_id, spins) VALUES (@configuration_id, @index, @time_ms, @worker_id, @spins) RETURNING chunk_id
 )~~~~~~";
 
 constexpr std::string_view InsertResultQuery = R"~~~~~~(
@@ -313,13 +245,14 @@ constexpr std::string_view RemoveWorkerQuery = R"~~~~~~(
 UPDATE "configurations" SET active_worker_id = NULL WHERE "configuration_id" = @configuration_id AND "active_worker_id" = @worker_id
 )~~~~~~";
 
-void SQLiteStorage::save_chunk(const Chunk & chunk, const std::span<uint8_t> & spins, const std::map<observables::Type, std::tuple<double, std::span<uint8_t>>> & results) {
+void SQLiteStorage::save_chunk(const Chunk & chunk, const std::span<uint8_t> & spins, const std::map<observables::Type, std::tuple<double_t, std::span<uint8_t>>> & results) {
 	try {
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
 		SQLite::Statement chunk_stmt { db, InsertChunkQuery.data() };
 		chunk_stmt.bind("@configuration_id", chunk.configuration_id);
 		chunk_stmt.bind("@index", chunk.index);
+		chunk_stmt.bind("@time_ms", 0);
 		chunk_stmt.bind("@worker_id", worker_id);
 		chunk_stmt.bind("@spins", spins.data(), static_cast<int>(spins.size()));
 
@@ -369,7 +302,7 @@ WHERE c.configuration_id = @configuration_id
 ORDER BY c."index"
 )~~~~~~";
 
-std::optional<std::tuple<Estimate, std::vector<double>>> SQLiteStorage::next_estimate(const int simulation_id) {
+std::optional<std::tuple<Estimate, std::vector<double_t>>> SQLiteStorage::next_estimate(const int simulation_id) {
 	try {
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
@@ -391,7 +324,7 @@ std::optional<std::tuple<Estimate, std::vector<double>>> SQLiteStorage::next_est
 		result_stmt.bind("@configuration_id", configuration_id);
 		result_stmt.bind("@type_id", type);
 
-		std::vector<double> values {};
+		std::vector<double_t> values {};
 		while (result_stmt.executeStep()) {
 			const auto buffer = result_stmt.getColumn(1).getBlob();
 			const auto data = schemas::GetMeasurements(buffer);
@@ -405,7 +338,7 @@ std::optional<std::tuple<Estimate, std::vector<double>>> SQLiteStorage::next_est
 			std::cout << "No results found for " << configuration_id << " type " << type << std::endl;
 		}
 
-		return std::optional(std::make_tuple<Estimate, std::vector<double>>({ configuration_id, type, bootstrap_resamples }, std::move(values)));
+		return std::optional(std::make_tuple<Estimate, std::vector<double_t>>({ configuration_id, type, bootstrap_resamples }, std::move(values)));
 	} catch (std::exception & e) {
 		std::cout << "Failed to fetch next estimate. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
@@ -413,16 +346,17 @@ std::optional<std::tuple<Estimate, std::vector<double>>> SQLiteStorage::next_est
 }
 
 constexpr std::string_view InsertEstimateQuery = R"~~~~~~(
-INSERT INTO "estimates" (configuration_id, type_id, mean, std_dev) VALUES (@configuration_id, @type_id, @mean, @std_dev)
+INSERT INTO "estimates" (configuration_id, type_id, time_ms, mean, std_dev) VALUES (@configuration_id, @type_id, @time_ms, @mean, @std_dev)
 )~~~~~~";
 
-void SQLiteStorage::save_estimate(const int configuration_id, const observables::Type type, const double mean, const double std_dev) {
+void SQLiteStorage::save_estimate(const int configuration_id, const observables::Type type, const double_t mean, const double_t std_dev) {
 	try {
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
 		SQLite::Statement estimate_stmt { db, InsertEstimateQuery.data() };
 		estimate_stmt.bind("@configuration_id", configuration_id);
 		estimate_stmt.bind("@type_id", type);
+		estimate_stmt.bind("@time_ms", 0);
 		estimate_stmt.bind("@mean", mean);
 		estimate_stmt.bind("@std_dev", std_dev);
 		estimate_stmt.exec();
@@ -480,7 +414,7 @@ std::optional<NextDerivative> SQLiteStorage::next_derivative(const int simulatio
 }
 
 constexpr std::string_view UpdateWorkerLastActive = R"~~~~~~(
-UPDATE "workers" SET "last_active_at" = datetime() WHERE "worker_id" = @worker_id;
+UPDATE "workers" SET "last_active_at" = unixepoch() WHERE "worker_id" = @worker_id;
 )~~~~~~";
 
 void SQLiteStorage::worker_keep_alive() {

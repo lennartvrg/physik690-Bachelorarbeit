@@ -6,26 +6,26 @@
 
 namespace tasks {
 	template<typename TStorage> requires std::is_base_of_v<Storage, TStorage>
-	class Bootstrap final : public Task<TStorage, std::tuple<Estimate, std::vector<double>>, std::tuple<double, double>> {
+	class Bootstrap final : public Task<TStorage, std::tuple<Estimate, std::vector<double_t>>, std::tuple<double_t, double_t>> {
 	public:
 		template<typename ... Args>
-		explicit Bootstrap(const Config & config, Args && ... args) : Task<TStorage, std::tuple<Estimate, std::vector<double>>, std::tuple<double, double>>(config, std::forward<Args>(args)...) {
+		explicit Bootstrap(const Config & config, Args && ... args) : Task<TStorage, std::tuple<Estimate, std::vector<double_t>>, std::tuple<double_t, double_t>>(config, std::forward<Args>(args)...) {
 
 		}
 
 	protected:
-		std::optional<std::tuple<Estimate, std::vector<double>>> next_task() override {
+		std::optional<std::tuple<Estimate, std::vector<double_t>>> next_task() override {
 			return this->storage->next_estimate(this->config.simulation_id);
 		}
 
-		std::tuple<double, double> execute_task(const std::tuple<Estimate, std::vector<double>> & task) override {
+		std::tuple<double_t, double_t> execute_task(const std::tuple<Estimate, std::vector<double_t>> & task) override {
 			const auto [estimate, values] = task;
 			std::mt19937 rng {std::random_device{}()};
 
 			return analysis::bootstrap_blocked(rng, values, estimate.bootstrap_resamples);
 		}
 
-		void save_task(const std::tuple<Estimate, std::vector<double>> & task, const std::tuple<double, double> & result) override {
+		void save_task(const std::tuple<Estimate, std::vector<double_t>> & task, const std::tuple<double_t, double_t> & result) override {
 			const auto [estimate, _1] = task;
 			const auto [mean, std_dev] = result;
 

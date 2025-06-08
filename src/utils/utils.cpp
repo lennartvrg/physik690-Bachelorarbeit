@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <ranges>
+#include <chrono>
 
 #include "utils/utils.hpp"
 
@@ -16,6 +17,10 @@ std::string utils::hostname() {
     return { buffer, end };
 }
 
+int64_t utils::timestamp_ms() {
+    const auto since_epoch = std::chrono::system_clock::now().time_since_epoch();
+    return std::chrono::duration_cast<std::chrono::seconds>(since_epoch).count();
+}
 
 double utils::mm256_reduce_add_pd(const simde__m256d v) {
     simde__m128d low = simde_mm256_castpd256_pd128(v);
@@ -26,7 +31,7 @@ double utils::mm256_reduce_add_pd(const simde__m256d v) {
     return simde_mm_cvtsd_f64(simde_mm_add_sd(low, high64));
 }
 
-std::vector<double> utils::sweep_through_temperature(const double max_temperature, const std::size_t steps) {
+std::vector<double_t> utils::sweep_through_temperature(const double max_temperature, const std::size_t steps) {
     std::vector<double> result (steps);
     std::ranges::generate(result, [&, n = 0.0] mutable {
         return n += max_temperature / static_cast<double>(steps);
@@ -34,8 +39,8 @@ std::vector<double> utils::sweep_through_temperature(const double max_temperatur
     return result;
 }
 
-std::vector<double> utils::square_elements(const std::span<double> & span) {
+std::vector<double_t> utils::square_elements(const std::span<double> & span) {
     std::vector<double> result (span.size());
-    std::ranges::transform(span, result.begin(), [] (const double v) { return v * v; });
+    std::ranges::transform(span, result.begin(), [] (const double_t v) { return v * v; });
     return result;
 }

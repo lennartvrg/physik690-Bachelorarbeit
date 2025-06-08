@@ -4,7 +4,7 @@
 
 #include "algorithms/wolff.hpp"
 
-std::tuple<double, std::tuple<double, double>> algorithms::wolff(Lattice & lattice, std::mt19937 & rng) noexcept {
+std::tuple<double_t, std::tuple<double_t, double_t>> algorithms::wolff(Lattice & lattice, std::mt19937 & rng) noexcept {
     // Prepares the result objects containing the total change of energy and magnetization
     auto chg_energy = 0.0, chg_magnet_cos = 0.0, chg_magnet_sin = 0.0;
     std::uniform_int_distribution<std::size_t> sites {0, lattice.num_sites()};
@@ -43,11 +43,13 @@ std::tuple<double, std::tuple<double, double>> algorithms::wolff(Lattice & latti
                                             (i + lattice.side_length()) % lattice.num_sites(),
                                             (i + lattice.num_sites() - lattice.side_length()) % lattice.num_sites()};
 
+        // Calculate dot product of neighbors for the old angle
+        const auto prop_i= std::cos(old_angle - reference_angle);
+
         // Go through neighboring spins which have not yet been visited
         for (const std::size_t j : neighbors) {
             if (!visited.contains(j)) {
-                // Calculate dot product of neighbors
-                const auto prop_i= std::cos(old_angle - reference_angle);
+                // Calculate dot product of neighbors for the new angle
                 const auto prop_j= std::cos(lattice.get(j) - reference_angle);
 
                 // Add spin to the cluster with P = 1 - exp{min{0.0,-2*BETA*(ox*r)*(oy*r)}} and mark as visited

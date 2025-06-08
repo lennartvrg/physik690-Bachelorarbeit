@@ -14,7 +14,7 @@ namespace observables {
 		MagneticSusceptibility = 5,
 	};
 
-	using Map = std::map<Type, std::tuple<double, std::vector<double>>>;
+	using Map = std::map<Type, std::tuple<double_t, std::vector<double_t>>>;
 }
 
 #endif //TYPE_HPP

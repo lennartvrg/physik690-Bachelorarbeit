@@ -15,13 +15,13 @@ struct Chunk final {
 
 	const std::size_t lattice_size;
 
-	const double temperature;
+	const double_t temperature;
 
 	const std::size_t sweeps;
 
-	std::optional<std::vector<double>> spins;
+	std::optional<std::vector<double_t>> spins;
 
-	bool skip_thermalization() const {
+	[[nodiscard]] bool skip_thermalization() const {
 		return index > 1;
 	}
 };

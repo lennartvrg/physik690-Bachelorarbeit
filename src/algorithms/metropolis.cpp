@@ -3,7 +3,7 @@
 /**
  * Performs a single Metropolis-Hastings sweep over the given lattice. A single sweep visits every lattice site in order
  * of the underlying vector and proposes a new angle for the spin at the site. The new state is accepted based on the
- * energy difference of the proposed new angle. If the state is accepted the site spin is updated and the total change
+ * energy difference of the proposed new angle. If the state is accepted, the site spin is updated and the total change
  * of energy and magnetization is updated.
  *
  * @brief Performs a single Metropolis-Hastings sweep over the given lattice.
@@ -12,12 +12,12 @@
  * @param rng The random number generator to use for the acceptance probability.
  * @return The total change of energy and magnetization once every lattice site is visited.
  */
-std::tuple<double, std::tuple<double, double>> algorithms::metropolis(Lattice & lattice, std::mt19937 & rng) noexcept {
+std::tuple<double_t, std::tuple<double_t, double_t>> algorithms::metropolis(Lattice & lattice, std::mt19937 & rng) noexcept {
     // Prepares the result objects containing the total change of energy and magnetization
     double chg_energy = 0.0, chg_magnet_cos = 0.0, chg_magnet_sin = 0.0;
 
     // Go over all lattice sites and propose a new angle for the spin at the site
-    for (std::size_t i = 0; i < lattice.num_sites(); i++) {
+    for (std::size_t i = 0; i < lattice.num_sites(); ++i) {
         const auto angle = ANGLE(rng);
 
         // Calculate the difference the proposed angle would make

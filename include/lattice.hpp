@@ -6,7 +6,7 @@
 
 class Lattice {
 public:
-    Lattice(std::size_t length, double beta, const std::optional<std::vector<double>> & spins);
+    Lattice(std::size_t length, double_t beta, const std::optional<std::vector<double_t>> & spins);
 
     [[nodiscard]] constexpr std::size_t side_length() const noexcept {
         return length;
@@ -16,28 +16,27 @@ public:
         return length * length;
     };
 
-    [[nodiscard]] constexpr double get_beta() const noexcept {
+    [[nodiscard]] constexpr double_t get_beta() const noexcept {
         return beta;
     }
 
+    [[nodiscard]] double_t get(std::size_t i) const noexcept;
+    void set(std::size_t i, double_t angle) noexcept;
 
-    [[nodiscard]] double get(std::size_t i) const noexcept;
-    void set(std::size_t i, double angle) noexcept;
+    [[nodiscard]] double_t energy() const noexcept;
+    [[nodiscard]] double_t energy_diff(std::size_t i, double_t angle) const noexcept;
 
-    [[nodiscard]] double energy() const noexcept;
-    [[nodiscard]] double energy_diff(std::size_t i, double angle) const noexcept;
+    [[nodiscard]] std::tuple<double_t, double_t> magnetization() const noexcept;
+    [[nodiscard]] std::tuple<double_t, double_t> magnetization_diff(std::size_t i, double_t angle) const noexcept;
 
-    [[nodiscard]] std::tuple<double, double> magnetization() const noexcept;
-    [[nodiscard]] std::tuple<double, double> magnetization_diff(std::size_t i, double angle) const noexcept;
+    [[nodiscard]] double_t acceptance(double_t energy_diff) const noexcept;
 
-    [[nodiscard]] double acceptance(double energy_diff) const noexcept;
-
-    std::vector<double> get_spins() const noexcept;
+    [[nodiscard]] std::vector<double_t> get_spins() const noexcept;
 
 private:
-    double beta;
+    double_t beta;
     std::size_t length;
-    std::vector<double> spins;
+    std::vector<double_t> spins;
 };
 
 #endif

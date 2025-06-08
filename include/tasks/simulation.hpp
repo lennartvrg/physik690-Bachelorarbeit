@@ -18,11 +18,11 @@ namespace tasks {
 	static algorithms::function sweeps[2] = { algorithms::metropolis, algorithms::wolff };
 
 	template<typename TStorage> requires std::is_base_of_v<Storage, TStorage>
-	class Simulation final : public Task<TStorage, Chunk, std::tuple<std::vector<double>, observables::Map>> {
+	class Simulation final : public Task<TStorage, Chunk, std::tuple<std::vector<double_t>, observables::Map>> {
 
 	public:
 		template<typename ... Args>
-		explicit Simulation(const Config & config, Args && ... args) : Task<TStorage, Chunk, std::tuple<std::vector<double>, observables::Map>>(config, std::forward<Args>(args)...) {
+		explicit Simulation(const Config & config, Args && ... args) : Task<TStorage, Chunk, std::tuple<std::vector<double_t>, observables::Map>>(config, std::forward<Args>(args)...) {
 
 		}
 
@@ -31,7 +31,7 @@ namespace tasks {
 			return this->storage->next_chunk(this->config.simulation_id);
 		}
 
-		std::tuple<std::vector<double>, observables::Map> execute_task(const Chunk & chunk) override {
+		std::tuple<std::vector<double_t>, observables::Map> execute_task(const Chunk & chunk) override {
 			Lattice lattice {chunk.lattice_size, 1.0 / chunk.temperature, chunk.spins};
 			std::mt19937 rng {std::random_device{}()};
 
@@ -52,23 +52,23 @@ namespace tasks {
 			}};
 		}
 
-		void save_task(const Chunk & chunk, const std::tuple<std::vector<double>, observables::Map> & result) override {
+		void save_task(const Chunk & chunk, const std::tuple<std::vector<double_t>, observables::Map> & result) override {
 			const auto [ spins, measurements ] = result;
 			std::cout << "Size: " << chunk.lattice_size << " | ConfigurationId: " << chunk.configuration_id << " | Index: " << chunk.index << std::endl;
 
-			flatbuffers::FlatBufferBuilder spin_builder { sizeof(std::vector<double>) + sizeof(double) * spins.size() };
+			flatbuffers::FlatBufferBuilder spin_builder { sizeof(std::vector<double_t>) + sizeof(double_t) * spins.size() };
 			const auto offset = spin_builder.CreateVector(spins.data(), spins.size());
 
 			const auto spins_offset = schemas::CreateSpins(spin_builder, offset);
 			spin_builder.Finish(spins_offset);
 
 			std::vector<flatbuffers::FlatBufferBuilder> builders;
-			std::map<observables::Type, std::tuple<double, std::span<uint8_t>>> results;
+			std::map<observables::Type, std::tuple<double_t, std::span<uint8_t>>> results;
 
 			for (const auto & [ type, value ] : measurements) {
 				const auto [tau, values] = value;
 
-				flatbuffers::FlatBufferBuilder result_builder { sizeof(std::vector<double>) + sizeof(double) * values.size() };
+				flatbuffers::FlatBufferBuilder result_builder { sizeof(std::vector<double_t>) + sizeof(double_t) * values.size() };
 				const auto result_offset = result_builder.CreateVector(values);
 
 				const auto measurements_offset = schemas::CreateMeasurements(result_builder, result_offset);
