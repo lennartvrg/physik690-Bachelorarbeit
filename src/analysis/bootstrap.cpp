@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cassert>
 #include <ranges>
 
 #include "analysis/boostrap.hpp"
@@ -7,8 +8,13 @@ std::vector<double_t> blocking(const std::span<double_t> & data, const double_t 
     const auto stride = static_cast<std::size_t>(std::ceil(tau));
     const auto norm = 1.0 / static_cast<double_t>(stride);
 
-    std::vector<double_t> result (std::ceil(static_cast<double_t>(data.size()) / static_cast<double_t>(stride)));
-    std::ranges::transform(data | std::ranges::views::chunk(stride), result.begin(), [&] (const auto & x) {
+    const auto num_chunks = static_cast<std::size_t>(std::ceil(static_cast<double_t>(data.size()) / static_cast<double_t>(stride)));
+    const auto chunked = data | std::ranges::views::chunk(stride);
+
+    assert(num_chunks == chunked.size() && "Number of chunks incorrect");
+    std::vector<double_t> result (num_chunks);
+
+    std::ranges::transform(chunked, result.begin(), [&] (const auto & x) {
         return std::ranges::fold_left(x, 0.0, std::plus()) * norm;
     });
 

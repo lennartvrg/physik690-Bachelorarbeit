@@ -1,7 +1,7 @@
 namespace schemas;
 
-table Spins {
+table Vector {
     data: [double];
 }
 
-root_type Spins;
+root_type Vector;

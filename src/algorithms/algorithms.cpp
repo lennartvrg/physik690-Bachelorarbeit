@@ -1,4 +1,16 @@
+#include <cassert>
+
 #include "algorithms/algorithms.hpp"
+
+constexpr std::string_view AlgorithmStrings[] =
+{
+	"Metropolis",
+	"Wolff"
+};
+
+std::ostream& algorithms::operator<<(std::ostream& out, const Algorithm value) {
+	return out << AlgorithmStrings[static_cast<std::size_t>(value)];
+}
 
 std::tuple<std::vector<double_t>, std::vector<double_t>> algorithms::simulate(Lattice & lattice, const std::size_t sweeps, std::mt19937 & rng, const function & sweep) noexcept {
 	auto current_energy = lattice.energy();

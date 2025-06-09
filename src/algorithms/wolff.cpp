@@ -24,7 +24,7 @@ std::tuple<double_t, std::tuple<double_t, double_t>> algorithms::wolff(Lattice &
         queue.pop();
 
         // Negating the parameters, adding PI and performing a mod 2PI maps the atan2 output domain [-PI, PI] to [0, 2PI)
-        const auto old_angle = lattice.get(i);
+        const auto old_angle = lattice[i];
         const auto flipped_angle = std::fmod(algorithms::N_PI<3> + 2.0 * reference_angle - old_angle, algorithms::N_PI<2>);
 
         // Calculate observable difference of proposed spin
@@ -50,7 +50,7 @@ std::tuple<double_t, std::tuple<double_t, double_t>> algorithms::wolff(Lattice &
         for (const std::size_t j : neighbors) {
             if (!visited.contains(j)) {
                 // Calculate dot product of neighbors for the new angle
-                const auto prop_j= std::cos(lattice.get(j) - reference_angle);
+                const auto prop_j= std::cos(lattice[j] - reference_angle);
 
                 // Add spin to the cluster with P = 1 - exp{min{0.0,-2*BETA*(ox*r)*(oy*r)}} and mark as visited
                 if (const auto accept = 1.0 - std::exp(std::min(0.0, -2.0 * lattice.get_beta() * prop_i * prop_j)); accept > ACCEPTANCE(rng)) {

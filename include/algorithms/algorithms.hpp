@@ -5,10 +5,12 @@
 #include <functional>
 #include <random>
 
-#include "../lattice.hpp"
+#include "lattice.hpp"
 
 namespace algorithms {
     enum Algorithm { METROPOLIS = 0, WOLFF = 1 };
+
+    std::ostream& operator<<(std::ostream& out, Algorithm value);
 
     /**
      * Helper constant for calculating N * PI.
@@ -20,7 +22,7 @@ namespace algorithms {
     /**
      * The acceptance probability on the uniform distribution [0.0, 1.0).
      */
-    static thread_local std::uniform_real_distribution<> ACCEPTANCE {0.0, 1.0};
+    static thread_local std::uniform_real_distribution ACCEPTANCE {0.0, 1.0};
 
     /**
      * The random angle on the uniform distribution [0, 2PI)

@@ -1,6 +1,8 @@
 #ifndef TYPE_HPP
 #define TYPE_HPP
 
+#include <cmath>
+#include <ostream>
 #include <map>
 #include <vector>
 
@@ -13,6 +15,8 @@ namespace observables {
 		SpecificHeat = 4,
 		MagneticSusceptibility = 5,
 	};
+
+	std::ostream& operator<<(std::ostream& out, Type value);
 
 	using Map = std::map<Type, std::tuple<double_t, std::vector<double_t>>>;
 }

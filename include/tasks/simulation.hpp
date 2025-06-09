@@ -1,17 +1,13 @@
 #ifndef SIMULATE_SIZE_TASK_HPP
 #define SIMULATE_SIZE_TASK_HPP
 
-#include <flatbuffers/flatbuffers.h>
-
 #include "observables/type.hpp"
 #include "algorithms/wolff.hpp"
 #include "algorithms/metropolis.hpp"
 #include "analysis/autocorrelation.hpp"
 #include "analysis/boostrap.hpp"
 #include "tasks/task.hpp"
-
-#include "schemas/spins_generated.h"
-#include "schemas/measurements_generated.h"
+#include "schemas/serialize.hpp"
 #include "utils/utils.hpp"
 
 namespace tasks {
@@ -27,8 +23,8 @@ namespace tasks {
 		}
 
 	protected:
-		std::optional<Chunk> next_task() override {
-			return this->storage->next_chunk(this->config.simulation_id);
+		std::optional<Chunk> next_task(std::shared_ptr<TStorage> storage) override {
+			return storage->next_chunk(this->config.simulation_id);
 		}
 
 		std::tuple<std::vector<double_t>, observables::Map> execute_task(const Chunk & chunk) override {
@@ -52,33 +48,18 @@ namespace tasks {
 			}};
 		}
 
-		void save_task(const Chunk & chunk, const std::tuple<std::vector<double_t>, observables::Map> & result) override {
-			const auto [ spins, measurements ] = result;
-			std::cout << "Size: " << chunk.lattice_size << " | ConfigurationId: " << chunk.configuration_id << " | Index: " << chunk.index << std::endl;
+		void save_task(std::shared_ptr<TStorage> storage, const Chunk & chunk, int64_t start_time, int64_t end_time, const std::tuple<std::vector<double_t>, observables::Map> & result) override {
+			const auto [ spin_data, measurements ] = result;
+			const auto spins = schemas::serialize(spin_data);
 
-			flatbuffers::FlatBufferBuilder spin_builder { sizeof(std::vector<double_t>) + sizeof(double_t) * spins.size() };
-			const auto offset = spin_builder.CreateVector(spins.data(), spins.size());
-
-			const auto spins_offset = schemas::CreateSpins(spin_builder, offset);
-			spin_builder.Finish(spins_offset);
-
-			std::vector<flatbuffers::FlatBufferBuilder> builders;
-			std::map<observables::Type, std::tuple<double_t, std::span<uint8_t>>> results;
-
+			std::map<observables::Type, std::tuple<double_t, std::vector<uint8_t>>> results;
 			for (const auto & [ type, value ] : measurements) {
 				const auto [tau, values] = value;
-
-				flatbuffers::FlatBufferBuilder result_builder { sizeof(std::vector<double_t>) + sizeof(double_t) * values.size() };
-				const auto result_offset = result_builder.CreateVector(values);
-
-				const auto measurements_offset = schemas::CreateMeasurements(result_builder, result_offset);
-				result_builder.Finish(measurements_offset);
-
-				results.insert({ type, { tau, result_builder.GetBufferSpan() } });
-				builders.push_back(std::move(result_builder));
+				results.insert({ type, { tau, schemas::serialize(values) } });
 			}
 
-			this->storage->save_chunk(chunk, spin_builder.GetBufferSpan(), results);
+			std::cout << "[Simulation] " << chunk.algorithm << " | Size: " << chunk.lattice_size << " | ConfigurationId: " << chunk.configuration_id << " | Index: " << chunk.index << std::endl;
+			storage->save_chunk(chunk, start_time, end_time, spins, results);
 		}
 	};
 }

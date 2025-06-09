@@ -14,8 +14,8 @@ namespace tasks {
 		}
 
 	protected:
-		std::optional<NextDerivative> next_task() override {
-			return this->storage->next_derivative(this->config.simulation_id);
+		std::optional<NextDerivative> next_task(std::shared_ptr<TStorage> storage) override {
+			return storage->next_derivative(this->config.simulation_id);
 		}
 
 		std::tuple<observables::Type, double_t, double_t> execute_task(const NextDerivative & task) override {
@@ -32,9 +32,9 @@ namespace tasks {
 			throw std::invalid_argument("Derivative type is neither energy or magnetization");
 		}
 
-		void save_task(const NextDerivative & task, const std::tuple<observables::Type, double_t, double_t> & result) override {
-			std::cout << "ConfigurationId: " << task.configuration_id << " | Type: " << get<0>(result) << std::endl;
-			this->storage->save_estimate(task.configuration_id, get<0>(result), get<1>(result), get<2>(result));
+		void save_task(std::shared_ptr<TStorage> storage, const NextDerivative & task, int64_t start_time, int64_t end_time, const std::tuple<observables::Type, double_t, double_t> & result) override {
+			std::cout << "[Derivatives] ConfigurationId: " << task.configuration_id << " | Type: " << get<0>(result) << std::endl;
+			storage->save_estimate(task.configuration_id, start_time, end_time, get<0>(result), get<1>(result), get<2>(result));
 		}
 
 	private:

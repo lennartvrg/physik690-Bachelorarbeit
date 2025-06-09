@@ -74,7 +74,10 @@ CREATE TABLE IF NOT EXISTS "estimates" (
 	configuration_id		INTEGER				NOT NULL,
 	type_id					INTEGER				NOT NULL,
 
-	time_ms					INTEGER				NOT NULL,
+	start_time				INTEGER				NOT NULL,
+	end_time				INTEGER				NOT NULL CHECK (end_time >= start_time),
+	time					INTEGER				GENERATED ALWAYS AS (end_time - start_time),
+
 	mean					REAL				NOT NULL,
 	std_dev					REAL				NOT NULL,
 

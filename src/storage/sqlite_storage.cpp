@@ -4,11 +4,8 @@
 
 #include "utils/utils.hpp"
 #include "storage/sqlite_storage.hpp"
-
-#include "schemas/measurements_generated.h"
-#include "schemas/spins_generated.h"
-
 #include "migrations.cpp"
+#include "schemas/serialize.hpp"
 
 constexpr std::string_view SQLITE_MIGRATIONS = R"~~~~~~(
 CREATE TRIGGER IF NOT EXISTS "TRG.RemoveInactiveWorkers"
@@ -52,7 +49,11 @@ CREATE TABLE IF NOT EXISTS "chunks" (
 
 	autocorrelation_id		INTEGER					NULL CHECK ((autocorrelation_id != NULL AND "index" = 0) OR (autocorrelation_id = NULL AND "index" != 0)),
 	worker_id				INTEGER				NOT NULL,
-	time_ms					INTEGER				NOT NULL CHECK (time_ms >= 0),
+
+	start_time				INTEGER				NOT NULL,
+	end_time				INTEGER				NOT NULL CHECK (end_time >= start_time),
+	time					INTEGER				GENERATED ALWAYS AS (end_time - start_time),
+
 	spins					BLOB				NOT NULL,
 
 	CONSTRAINT "PK.Chunks_ChunkId" PRIMARY KEY (chunk_id),
@@ -94,13 +95,13 @@ SQLiteStorage::SQLiteStorage(const std::string_view & path) : worker_id(-1), db(
 		worker.bind("@name", utils::hostname());
 		worker.bind("@last_active_at", utils::timestamp_ms());
 
-		while (worker.executeStep()) {
-			worker_id = worker.getColumn(0).getInt();
-		}
+		if (!worker.executeStep()) throw std::invalid_argument("Did not insert worker!");
+		worker_id = worker.getColumn(0).getInt();
 
+		while (worker.executeStep()) { }
 		transaction.commit();
 	} catch (const std::exception &e) {
-		std::cout << "Failed to migrate database. SQLite exception: " << e.what() << std::endl;
+		std::cout << "[SQLite] Failed to migrate database. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
 	}
 }
@@ -150,7 +151,10 @@ void SQLiteStorage::prepare_simulation(const Config config) {
 			fetch_metadata.bind("@simulation_id", static_cast<int>(config.simulation_id));
 			fetch_metadata.bind("@algorithm", key);
 
-			auto metadata_id = fetch_metadata.executeStep() ? fetch_metadata.getColumn(0).getInt() : -1;
+			if (!fetch_metadata.executeStep()) throw std::invalid_argument("Did not insert metadata");
+			const auto metadata_id = fetch_metadata.getColumn(0).getInt();
+
+			while (fetch_metadata.executeStep()) { }
 			fetch_metadata.reset();
 
 			for (const auto size : value.sizes) {
@@ -168,7 +172,7 @@ void SQLiteStorage::prepare_simulation(const Config config) {
 
 		transaction.commit();
 	} catch (std::exception & e) {
-		std::cout << "Failed to prepare simulation. SQLite exception: " << e.what() << std::endl;
+		std::cout << "[SQLite] Failed to prepare simulation. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
 	}
 }
@@ -213,8 +217,7 @@ std::optional<Chunk> SQLiteStorage::next_chunk(const int simulation_id) {
 		std::optional<std::vector<double_t>> spins = std::nullopt;
 		if (!next_chunk.getColumn(6).isNull()) {
 			const auto buffer = next_chunk.getColumn(6).getBlob();
-			const auto data = schemas::GetSpins(buffer);
-			spins = std::vector(data->data()->begin(), data->data()->end());
+			spins = schemas::deserialize(buffer);
 		}
 
 		return std::optional<Chunk>({
@@ -228,13 +231,13 @@ std::optional<Chunk> SQLiteStorage::next_chunk(const int simulation_id) {
 		});
 
 	} catch (std::exception & e) {
-		std::cout << "Failed to fetch next chunk. SQLite exception: " << e.what() << std::endl;
+		std::cout << "[SQLite] Failed to fetch next chunk. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
 	}
 }
 
 constexpr std::string_view InsertChunkQuery = R"~~~~~~(
-INSERT INTO "chunks" (configuration_id, "index", time_ms, worker_id, spins) VALUES (@configuration_id, @index, @time_ms, @worker_id, @spins) RETURNING chunk_id
+INSERT INTO "chunks" (configuration_id, "index", start_time, end_time, worker_id, spins) VALUES (@configuration_id, @index, @start_time, @end_time, @worker_id, @spins) RETURNING chunk_id
 )~~~~~~";
 
 constexpr std::string_view InsertResultQuery = R"~~~~~~(
@@ -245,14 +248,15 @@ constexpr std::string_view RemoveWorkerQuery = R"~~~~~~(
 UPDATE "configurations" SET active_worker_id = NULL WHERE "configuration_id" = @configuration_id AND "active_worker_id" = @worker_id
 )~~~~~~";
 
-void SQLiteStorage::save_chunk(const Chunk & chunk, const std::span<uint8_t> & spins, const std::map<observables::Type, std::tuple<double_t, std::span<uint8_t>>> & results) {
+void SQLiteStorage::save_chunk(const Chunk & chunk, const int64_t start_time, const int64_t end_time, const std::span<const uint8_t> & spins, const std::map<observables::Type, std::tuple<double_t, std::vector<uint8_t>>> & results) {
 	try {
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
 		SQLite::Statement chunk_stmt { db, InsertChunkQuery.data() };
 		chunk_stmt.bind("@configuration_id", chunk.configuration_id);
 		chunk_stmt.bind("@index", chunk.index);
-		chunk_stmt.bind("@time_ms", 0);
+		chunk_stmt.bind("@start_time", start_time);
+		chunk_stmt.bind("@end_time", end_time);
 		chunk_stmt.bind("@worker_id", worker_id);
 		chunk_stmt.bind("@spins", spins.data(), static_cast<int>(spins.size()));
 
@@ -278,7 +282,7 @@ void SQLiteStorage::save_chunk(const Chunk & chunk, const std::span<uint8_t> & s
 
 		transaction.commit();
 	} catch (std::exception & e) {
-		std::cout << "Failed to save chunk. SQLite exception: " << e.what() << std::endl;
+		std::cout << "[SQLite] Failed to save chunk. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
 	}
 }
@@ -288,6 +292,7 @@ SELECT c.configuration_id, s.bootstrap_resamples, m.num_chunks, t.type_id
 FROM "simulations" s
 INNER JOIN "configurations" c ON c.simulation_id = s.simulation_id
 INNER JOIN "metadata" m ON c.metadata_id = m.metadata_id
+INNER JOIN "chunks" ch ON c.configuration_id = ch.configuration_id AND ch."index" = m.num_chunks
 CROSS JOIN "types" t ON t.type_id BETWEEN 0 AND 3
 LEFT JOIN "estimates" e ON e.configuration_id = c.configuration_id AND e.type_id = t.type_id
 WHERE s.simulation_id = @simulation_id AND c.active_worker_id IS NULL AND e.type_id IS NULL
@@ -327,10 +332,10 @@ std::optional<std::tuple<Estimate, std::vector<double_t>>> SQLiteStorage::next_e
 		std::vector<double_t> values {};
 		while (result_stmt.executeStep()) {
 			const auto buffer = result_stmt.getColumn(1).getBlob();
-			const auto data = schemas::GetMeasurements(buffer);
+			const auto data = schemas::deserialize(buffer);
 
-			values.reserve(data->data()->size() * num_chunks);
-			values.insert(values.end(), data->data()->begin(), data->data()->end());
+			values.reserve(data.size() * num_chunks);
+			values.insert(values.end(), data.begin(), data.end());
 		}
 		transaction.commit();
 
@@ -340,23 +345,24 @@ std::optional<std::tuple<Estimate, std::vector<double_t>>> SQLiteStorage::next_e
 
 		return std::optional(std::make_tuple<Estimate, std::vector<double_t>>({ configuration_id, type, bootstrap_resamples }, std::move(values)));
 	} catch (std::exception & e) {
-		std::cout << "Failed to fetch next estimate. SQLite exception: " << e.what() << std::endl;
+		std::cout << "[SQLite] Failed to fetch next estimate. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
 	}
 }
 
 constexpr std::string_view InsertEstimateQuery = R"~~~~~~(
-INSERT INTO "estimates" (configuration_id, type_id, time_ms, mean, std_dev) VALUES (@configuration_id, @type_id, @time_ms, @mean, @std_dev)
+INSERT INTO "estimates" (configuration_id, type_id, start_time, end_time, mean, std_dev) VALUES (@configuration_id, @type_id, @start_time, @end_time, @mean, @std_dev)
 )~~~~~~";
 
-void SQLiteStorage::save_estimate(const int configuration_id, const observables::Type type, const double_t mean, const double_t std_dev) {
+void SQLiteStorage::save_estimate(const int configuration_id, const int64_t start_time, const int64_t end_time, const observables::Type type, const double_t mean, const double_t std_dev) {
 	try {
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
 		SQLite::Statement estimate_stmt { db, InsertEstimateQuery.data() };
 		estimate_stmt.bind("@configuration_id", configuration_id);
 		estimate_stmt.bind("@type_id", type);
-		estimate_stmt.bind("@time_ms", 0);
+		estimate_stmt.bind("@start_time", start_time);
+		estimate_stmt.bind("@end_time", end_time);
 		estimate_stmt.bind("@mean", mean);
 		estimate_stmt.bind("@std_dev", std_dev);
 		estimate_stmt.exec();
@@ -368,7 +374,7 @@ void SQLiteStorage::save_estimate(const int configuration_id, const observables:
 
 		transaction.commit();
 	} catch (const std::exception & e) {
-		std::cout << "Failed to save estimate. SQLite exception: " << e.what() << std::endl;
+		std::cout << "[SQLite] Failed to save estimate. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
 	}
 }
@@ -408,7 +414,7 @@ std::optional<NextDerivative> SQLiteStorage::next_derivative(const int simulatio
 
 		return { { configuration_id, type, temperature, mean, std_dev, square_mean, square_std_dev } };
 	} catch (const std::exception & e) {
-		std::cout << "Failed to fetch next derivative. SQLite exception: " << e.what() << std::endl;
+		std::cout << "[SQLite] Failed to fetch next derivative. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
 	}
 }
@@ -426,7 +432,7 @@ void SQLiteStorage::worker_keep_alive() {
 
 		transaction.commit();
 	} catch (std::exception & e) {
-		std::cout << "Failed to send worker keep alive. SQLite exception: " << e.what() << std::endl;
+		std::cout << "[SQLite] Failed to send worker keep alive. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
 	}
 }

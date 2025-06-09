@@ -1,7 +1,0 @@
-namespace schemas;
-
-table Measurements {
-    data: [double];
-}
-
-root_type Measurements;

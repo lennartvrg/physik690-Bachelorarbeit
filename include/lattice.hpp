@@ -14,14 +14,14 @@ public:
 
     [[nodiscard]] constexpr std::size_t num_sites() const noexcept {
         return length * length;
-    };
+    }
 
     [[nodiscard]] constexpr double_t get_beta() const noexcept {
         return beta;
     }
 
-    [[nodiscard]] double_t get(std::size_t i) const noexcept;
     void set(std::size_t i, double_t angle) noexcept;
+    double operator[] (std::size_t i) const { return spins[i]; }
 
     [[nodiscard]] double_t energy() const noexcept;
     [[nodiscard]] double_t energy_diff(std::size_t i, double_t angle) const noexcept;
