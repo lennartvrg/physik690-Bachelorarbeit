@@ -39,9 +39,9 @@ namespace tasks {
 
 	private:
 		static std::tuple<double_t, double_t> specific_heat(const double_t temperature, const double_t mean, const double_t std_dev, const double_t square_mean, const double_t square_std_dev) {
-			const auto cs_mean = (square_mean - std::pow(mean, 2)) / std::pow(temperature, 2);
+			const auto cv_mean = (square_mean - std::pow(mean, 2)) / std::pow(temperature, 2);
 			const auto cv_std_dev = std::sqrt(std::pow(square_std_dev / std::pow(temperature, 2), 2) + std::pow(2.0 * mean * std_dev / std::pow(temperature, 2), 2));
-			return { cs_mean, cv_std_dev };
+			return { cv_mean, cv_std_dev };
 		}
 
 		static std::tuple<double_t, double_t> magnetic_susceptibility(const double_t temperature, const double_t mean, const double_t std_dev, const double_t square_mean, const double_t square_std_dev) {

@@ -4,7 +4,7 @@
 #include "algorithms/algorithms.hpp"
 
 namespace algorithms {
-    std::tuple<double_t, std::tuple<double_t, double_t>> metropolis(Lattice & lattice, std::mt19937 & rng) noexcept;
+    std::tuple<double_t, std::tuple<double_t, double_t>> metropolis(Lattice & lattice, openrand::Tyche & rng) noexcept;
 }
 
 #endif //METROPOLIS_HPP

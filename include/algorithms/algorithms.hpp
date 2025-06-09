@@ -4,6 +4,7 @@
 #include <tuple>
 #include <functional>
 #include <random>
+#include <openrand/tyche.h>
 
 #include "lattice.hpp"
 
@@ -29,9 +30,9 @@ namespace algorithms {
      */
     static thread_local std::uniform_real_distribution ANGLE {0.0, N_PI<2>};
 
-    using function = std::function<std::tuple<double_t, std::tuple<double_t, double_t>>(Lattice&, std::mt19937&)>;
+    using function = std::function<std::tuple<double_t, std::tuple<double_t, double_t>>(Lattice&, openrand::Tyche&)>;
 
-    std::tuple<std::vector<double_t>, std::vector<double_t>> simulate(Lattice & lattice, std::size_t sweeps, std::mt19937 & rng, const function & sweep) noexcept;
+    std::tuple<std::vector<double_t>, std::vector<double_t>> simulate(Lattice & lattice, std::size_t sweeps, openrand::Tyche & rng, const function & sweep) noexcept;
 }
 
 #endif //ALGORITHM_HPP

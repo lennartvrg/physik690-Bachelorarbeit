@@ -29,7 +29,7 @@ dependencies = [
   json_dep
 ]
 
-incdir = include_directories('include')
+incdir = include_directories(['include', 'thirdparty/OpenRAND/include'])
 run_command('flatc', '--cpp', '-o', 'include/schemas', 'schemas/vector.fbs', check: true)
 
 exe = executable(

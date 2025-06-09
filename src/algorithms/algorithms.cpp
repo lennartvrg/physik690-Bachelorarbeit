@@ -12,7 +12,7 @@ std::ostream& algorithms::operator<<(std::ostream& out, const Algorithm value) {
 	return out << AlgorithmStrings[static_cast<std::size_t>(value)];
 }
 
-std::tuple<std::vector<double_t>, std::vector<double_t>> algorithms::simulate(Lattice & lattice, const std::size_t sweeps, std::mt19937 & rng, const function & sweep) noexcept {
+std::tuple<std::vector<double_t>, std::vector<double_t>> algorithms::simulate(Lattice & lattice, const std::size_t sweeps, openrand::Tyche & rng, const function & sweep) noexcept {
 	auto current_energy = lattice.energy();
 	auto [current_magnet_cos, current_magnet_sin] = lattice.magnetization();
 

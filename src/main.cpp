@@ -12,8 +12,8 @@ int main() {
         const auto config = Config::from_file("config.toml");
 
         tasks::Simulation<SQLiteStorage> { config, "output/data.db" }.execute();
-        //tasks::Bootstrap<SQLiteStorage> { config, "output/data.db" }.execute();
-        //tasks::Derivatives<SQLiteStorage> { config, "output/data.db" }.execute();
+        tasks::Bootstrap<SQLiteStorage> { config, "output/data.db" }.execute();
+        tasks::Derivatives<SQLiteStorage> { config, "output/data.db" }.execute();
 
         return 0;
     } catch (const std::exception & e) {

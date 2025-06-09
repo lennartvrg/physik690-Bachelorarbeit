@@ -4,14 +4,14 @@
 
 #include "algorithms/wolff.hpp"
 
-std::tuple<double_t, std::tuple<double_t, double_t>> algorithms::wolff(Lattice & lattice, std::mt19937 & rng) noexcept {
+std::tuple<double_t, std::tuple<double_t, double_t>> algorithms::wolff(Lattice & lattice, openrand::Tyche & rng) noexcept {
     // Prepares the result objects containing the total change of energy and magnetization
     auto chg_energy = 0.0, chg_magnet_cos = 0.0, chg_magnet_sin = 0.0;
     std::uniform_int_distribution<std::size_t> sites {0, lattice.num_sites()};
 
     // Pick a random starting site and random reference angle
     const auto random_site = sites(rng);
-    const auto reference_angle = ANGLE(rng);
+    const auto reference_angle = rng.rand<double>() * N_PI<2>;
 
     // Keep track of visited sites and site yet to flip. Start with the random site from above.
     std::unordered_set visited { random_site };
@@ -53,7 +53,7 @@ std::tuple<double_t, std::tuple<double_t, double_t>> algorithms::wolff(Lattice &
                 const auto prop_j= std::cos(lattice[j] - reference_angle);
 
                 // Add spin to the cluster with P = 1 - exp{min{0.0,-2*BETA*(ox*r)*(oy*r)}} and mark as visited
-                if (const auto accept = 1.0 - std::exp(std::min(0.0, -2.0 * lattice.get_beta() * prop_i * prop_j)); accept > ACCEPTANCE(rng)) {
+                if (const auto accept = 1.0 - std::exp(std::min(0.0, -2.0 * lattice.get_beta() * prop_i * prop_j)); accept > rng.rand<double>()) {
                     visited.emplace(j);
                     queue.emplace(j);
                 }

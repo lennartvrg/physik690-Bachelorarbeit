@@ -30,15 +30,13 @@ std::vector<double_t> analysis::thermalize_and_block(const std::span<double_t> &
     return blocking(skip_thermalization ? data : thermalize(data, tau), tau);
 }
 
-double_t sample_with_replacement(std::mt19937 & rng, const std::vector<double_t> & data, const std::size_t n) {
-    std::uniform_int_distribution<std::size_t> distrib {0, data.size() - 1};
+double_t sample_with_replacement(openrand::Tyche & rng, const std::vector<double_t> & data, const std::size_t n) {
     std::vector<double_t> draws (n);
-
-    std::ranges::generate(draws, [&] { return data[distrib(rng)]; });
+    std::ranges::generate(draws, [&] { return data[rng.range(data.size())]; });
     return std::ranges::fold_left(draws, 0.0, std::plus()) / static_cast<double_t>(draws.size());
 }
 
-std::tuple<double_t, double_t> analysis::bootstrap_blocked(std::mt19937 & rng, const std::vector<double_t> & blocked, const std::size_t n) {
+std::tuple<double_t, double_t> analysis::bootstrap_blocked(openrand::Tyche & rng, const std::vector<double_t> & blocked, const std::size_t n) {
     const std::size_t count = std::ranges::size(blocked);
 
     std::vector<double_t> resamples (n);
@@ -46,7 +44,7 @@ std::tuple<double_t, double_t> analysis::bootstrap_blocked(std::mt19937 & rng, c
         return sample_with_replacement(rng, blocked, n);
     });
 
-    const auto mean = std::ranges::fold_left(blocked, 0.0, std::plus()) / static_cast<double_t>(count);
+    const auto mean = std::ranges::fold_left(blocked, 0.0, std::plus()) / static_cast<double_t>(n);
     const auto std_dev = std::ranges::fold_left(resamples, 0.0, [&] (const auto sum, const double_t x) {
         return sum + std::pow(x - mean, 2);
     } ) / static_cast<double_t>(count - 1);

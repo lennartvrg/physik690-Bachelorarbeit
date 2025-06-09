@@ -18,10 +18,10 @@ static void discrete_fourier_transform(const std::span<std::complex<double_t>> &
 	assert(in.size() == out.size() && "Input and output vectors must be of same size");
 	std::unique_lock lock {mtx};
 
-	const auto plan = fftw_plan_dft_1d(static_cast<int>(in.size()), reinterpret_cast<fftw_complex*>(&in[0]), reinterpret_cast<fftw_complex*>(&out[0]), direction, FFTW_ESTIMATE);
+	const auto plan = fftw_plan_dft_1d(static_cast<int>(in.size()), reinterpret_cast<fftw_complex*>(in.data()), reinterpret_cast<fftw_complex*>(out.data()), direction, FFTW_ESTIMATE);
 	lock.unlock();
 
-	fftw_execute_dft(plan, reinterpret_cast<fftw_complex*>(&in[0]), reinterpret_cast<fftw_complex*>(&out[0]));
+	fftw_execute_dft(plan, reinterpret_cast<fftw_complex*>(in.data()), reinterpret_cast<fftw_complex*>(out.data()));
 	fftw_destroy_plan(plan);
 }
 
