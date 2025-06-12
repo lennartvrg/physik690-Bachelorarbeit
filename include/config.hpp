@@ -16,11 +16,11 @@ struct AlgorithmConfig {
 struct Config {
 	static Config from_file(std::string_view path);
 
-	const std::size_t simulation_id;
+	const int32_t simulation_id;
 	const std::size_t bootstrap_resamples;
 
-	const double_t max_temperature;
-	const std::size_t temperature_steps;
+	const int32_t max_temperature;
+	const int32_t temperature_steps;
 
 	const std::map<algorithms::Algorithm, AlgorithmConfig> algorithms;
 };

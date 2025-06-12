@@ -8,9 +8,9 @@
 #include "../include/utils/utils.hpp"
 #include "algorithms/algorithms.hpp"
 
-Lattice::Lattice(const std::size_t length, const double_t beta, const std::optional<std::vector<double_t>> & spins) : beta(beta), length(length), spins(spins.value_or(std::vector<double_t> (length * length))) {
+Lattice::Lattice(const std::size_t length, const utils::ratio beta, const std::optional<std::vector<double_t>> & spins) : beta(beta.approx()), length(length), spins(spins.value_or(std::vector<double_t> (length * length))) {
     assert(length * length % 4 == 0 && "Lattice size must be a multiple of 4 as the SIMD instructions won't work otherwise");
-    assert(beta > 0 && "Beta must be greater than zero");
+    assert(beta.numerator > 0 && beta.denominator > 0 && "Beta must be greater than zero");
     assert(this->spins.size() == length * length && "Number of spins must be L^2");
 }
 

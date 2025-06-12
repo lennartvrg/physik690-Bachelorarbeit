@@ -1,6 +1,8 @@
 #ifndef DERIVATIVES_HPP
 #define DERIVATIVES_HPP
 
+#include <cmath>
+
 #include "task.hpp"
 #include "storage/next_derivative.hpp"
 
@@ -38,15 +40,17 @@ namespace tasks {
 		}
 
 	private:
-		static std::tuple<double_t, double_t> specific_heat(const double_t temperature, const double_t mean, const double_t std_dev, const double_t square_mean, const double_t square_std_dev) {
-			const auto cv_mean = (square_mean - std::pow(mean, 2)) / std::pow(temperature, 2);
-			const auto cv_std_dev = std::sqrt(std::pow(square_std_dev / std::pow(temperature, 2), 2) + std::pow(2.0 * mean * std_dev / std::pow(temperature, 2), 2));
+		static std::tuple<double_t, double_t> specific_heat(const utils::ratio temperature, const double_t mean, const double_t std_dev, const double_t square_mean, const double_t square_std_dev) {
+			const auto norm = std::pow(temperature.inverse().approx(), 2.0);
+			const auto cv_mean = (square_mean - std::pow(mean, 2.0)) * norm;
+			const auto cv_std_dev = std::sqrt(std::pow(square_std_dev * norm, 2.0) + std::pow(2.0 * mean * std_dev * norm, 2.0));
 			return { cv_mean, cv_std_dev };
 		}
 
-		static std::tuple<double_t, double_t> magnetic_susceptibility(const double_t temperature, const double_t mean, const double_t std_dev, const double_t square_mean, const double_t square_std_dev) {
-			const auto xs_mean = (square_mean - std::pow(mean, 2)) / temperature;
-			const auto xs_std_dev = std::sqrt(std::pow(square_std_dev / temperature, 2) + std::pow(2.0 * mean * std_dev / temperature, 2));
+		static std::tuple<double_t, double_t> magnetic_susceptibility(const utils::ratio temperature, const double_t mean, const double_t std_dev, const double_t square_mean, const double_t square_std_dev) {
+			const auto norm = temperature.inverse().approx();
+			const auto xs_mean = (square_mean - std::pow(mean, 2.0)) * norm;
+			const auto xs_std_dev = std::sqrt(std::pow(square_std_dev * norm, 2.0) + std::pow(2.0 * mean * std_dev * norm, 2.0));
 			return { xs_mean, xs_std_dev };
 		}
 	};

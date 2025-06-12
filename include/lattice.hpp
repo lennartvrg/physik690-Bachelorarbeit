@@ -4,9 +4,11 @@
 #include <optional>
 #include <vector>
 
+#include "utils/ratio.hpp"
+
 class Lattice {
 public:
-    Lattice(std::size_t length, double_t beta, const std::optional<std::vector<double_t>> & spins);
+    Lattice(std::size_t length, utils::ratio beta, const std::optional<std::vector<double_t>> & spins);
 
     [[nodiscard]] constexpr std::size_t side_length() const noexcept {
         return length;

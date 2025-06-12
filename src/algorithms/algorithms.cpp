@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cmath>
 
 #include "algorithms/algorithms.hpp"
 
@@ -26,7 +27,7 @@ std::tuple<std::vector<double_t>, std::vector<double_t>> algorithms::simulate(La
 		current_energy += chg_energy;
 
 		energies[i] = current_energy * norm;
-		magnets[i] = std::sqrt(std::pow(current_magnet_cos, 2) + std::pow(current_magnet_sin, 2)) * norm;
+		magnets[i] = std::sqrt(std::pow(current_magnet_cos, 2.0) + std::pow(current_magnet_sin, 2.0)) * norm;
 	}
 
 	return {energies, magnets};

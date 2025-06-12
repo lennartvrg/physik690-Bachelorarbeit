@@ -4,7 +4,8 @@
 #include <optional>
 #include <vector>
 
-#include "../algorithms/algorithms.hpp"
+#include "algorithms/algorithms.hpp"
+#include "utils/ratio.hpp"
 
 struct Chunk final {
 	const int configuration_id;
@@ -15,7 +16,7 @@ struct Chunk final {
 
 	const std::size_t lattice_size;
 
-	const double_t temperature;
+	const utils::ratio temperature;
 
 	const std::size_t sweeps;
 

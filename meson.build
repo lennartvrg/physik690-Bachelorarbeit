@@ -35,6 +35,7 @@ run_command('flatc', '--cpp', '-o', 'include/schemas', 'schemas/vector.fbs', che
 exe = executable(
   'xy_model',
   'src/utils/utils.cpp',
+  'src/utils/ratio.cpp',
   'src/schemas/serialize.cpp',
   'src/config.cpp',
   'src/lattice.cpp',
@@ -47,7 +48,7 @@ exe = executable(
   'src/storage/migrations.cpp',
   'src/storage/sqlite_storage.cpp',
   'src/main.cpp',
-  cpp_args: ['-march=native', '-g', '-fno-inline', '-ffast-math'],
+  cpp_args: ['-march=native', '-ffast-math'],
   link_args: ['-march=native', '-ltbb'],
   include_directories: incdir,
   install : true,

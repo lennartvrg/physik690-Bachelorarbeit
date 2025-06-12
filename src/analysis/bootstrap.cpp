@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cassert>
 #include <ranges>
+#include <cmath>
 
 #include "analysis/boostrap.hpp"
 
@@ -44,9 +45,11 @@ std::tuple<double_t, double_t> analysis::bootstrap_blocked(openrand::Tyche & rng
         return sample_with_replacement(rng, blocked, n);
     });
 
-    const auto mean = std::ranges::fold_left(blocked, 0.0, std::plus()) / static_cast<double_t>(n);
+    const auto mean = std::ranges::fold_left(blocked, 0.0, std::plus()) / static_cast<double_t>(count);
+    const auto tmp = std::ranges::fold_left(resamples, 0.0, std::plus()) / static_cast<double_t>(n);
+
     const auto std_dev = std::ranges::fold_left(resamples, 0.0, [&] (const auto sum, const double_t x) {
-        return sum + std::pow(x - mean, 2);
+        return sum + std::pow(x - tmp, 2.0);
     } ) / static_cast<double_t>(count - 1);
 
     return {mean, std_dev};

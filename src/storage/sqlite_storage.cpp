@@ -121,7 +121,7 @@ SELECT metadata_id FROM "metadata" WHERE simulation_id = @simulation_id AND algo
 )~~~~~~";
 
 constexpr std::string_view InsertConfigurationsQuery = R"~~~~~~(
-INSERT INTO "configurations" (simulation_id, metadata_id, lattice_size, temperature) VALUES (@simulation_id, @metadata_id, @lattice_size, @temperature)
+INSERT INTO "configurations" (simulation_id, metadata_id, lattice_size, temperature_numerator, temperature_denominator) VALUES (@simulation_id, @metadata_id, @lattice_size, @temperature_numerator, @temperature_denominator)
 ON CONFLICT DO NOTHING
 )~~~~~~";
 
@@ -130,7 +130,7 @@ void SQLiteStorage::prepare_simulation(const Config config) {
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
 		SQLite::Statement simulation { db, InsertSimulationQuery.data() };
-		simulation.bind("@simulation_id", static_cast<int>(config.simulation_id));
+		simulation.bind("@simulation_id", config.simulation_id);
 		simulation.bind("@bootstrap_resamples", static_cast<int>(config.bootstrap_resamples));
 		simulation.bind("@created_at", utils::timestamp_ms());
 		simulation.exec();
@@ -140,7 +140,7 @@ void SQLiteStorage::prepare_simulation(const Config config) {
 		SQLite::Statement configurations { db, InsertConfigurationsQuery.data() };
 
 		for (const auto & [key, value] : config.algorithms) {
-			insert_metadata.bind("@simulation_id", static_cast<int>(config.simulation_id));
+			insert_metadata.bind("@simulation_id", config.simulation_id);
 			insert_metadata.bind("@algorithm", key);
 			insert_metadata.bind("@num_chunks", static_cast<int>(value.num_chunks));
 			insert_metadata.bind("@sweeps_per_chunk", static_cast<int>(value.sweeps_per_chunk));
@@ -148,7 +148,7 @@ void SQLiteStorage::prepare_simulation(const Config config) {
 			insert_metadata.exec();
 			insert_metadata.reset();
 
-			fetch_metadata.bind("@simulation_id", static_cast<int>(config.simulation_id));
+			fetch_metadata.bind("@simulation_id", config.simulation_id);
 			fetch_metadata.bind("@algorithm", key);
 
 			if (!fetch_metadata.executeStep()) throw std::invalid_argument("Did not insert metadata");
@@ -159,10 +159,11 @@ void SQLiteStorage::prepare_simulation(const Config config) {
 
 			for (const auto size : value.sizes) {
 				for (const auto temperature : utils::sweep_through_temperature(config.max_temperature, config.temperature_steps)) {
-					configurations.bind("@simulation_id", static_cast<int>(config.simulation_id));
+					configurations.bind("@simulation_id", config.simulation_id);
 					configurations.bind("@metadata_id", metadata_id);
 					configurations.bind("@lattice_size", static_cast<int>(size));
-					configurations.bind("@temperature", temperature);
+					configurations.bind("@temperature_numerator", temperature.numerator);
+					configurations.bind("@temperature_denominator", temperature.denominator);
 
 					configurations.exec();
 					configurations.reset();
@@ -178,7 +179,7 @@ void SQLiteStorage::prepare_simulation(const Config config) {
 }
 
 constexpr std::string_view NextChunkQuery = R"~~~~~~(
-SELECT c.configuration_id, IfNull(k.num_chunks, 0) + 1, m.algorithm, c.lattice_size, c.temperature, m.sweeps_per_chunk, k.spins
+SELECT c.configuration_id, IfNull(k.num_chunks, 0) + 1, m.algorithm, c.lattice_size, c.temperature_numerator, c.temperature_denominator, m.sweeps_per_chunk, k.spins
 FROM simulations s
 INNER JOIN configurations c on s.simulation_id = c.simulation_id
 INNER JOIN metadata m ON c.metadata_id = m.metadata_id
@@ -215,8 +216,8 @@ std::optional<Chunk> SQLiteStorage::next_chunk(const int simulation_id) {
 		transaction.commit();
 
 		std::optional<std::vector<double_t>> spins = std::nullopt;
-		if (!next_chunk.getColumn(6).isNull()) {
-			const auto buffer = next_chunk.getColumn(6).getBlob();
+		if (!next_chunk.getColumn(7).isNull()) {
+			const auto buffer = next_chunk.getColumn(7).getBlob();
 			spins = schemas::deserialize(buffer);
 		}
 
@@ -225,8 +226,8 @@ std::optional<Chunk> SQLiteStorage::next_chunk(const int simulation_id) {
 			next_chunk.getColumn(1).getInt(),
 			static_cast<algorithms::Algorithm>(next_chunk.getColumn(2).getInt()),
 			static_cast<std::size_t>(next_chunk.getColumn(3).getInt()),
-			next_chunk.getColumn(4).getDouble(),
-			static_cast<std::size_t>(next_chunk.getColumn(5).getInt()),
+			utils::ratio { next_chunk.getColumn(4).getInt(), next_chunk.getColumn(5).getInt() },
+			static_cast<std::size_t>(next_chunk.getColumn(6).getInt()),
 			spins
 		});
 
@@ -380,7 +381,7 @@ void SQLiteStorage::save_estimate(const int configuration_id, const int64_t star
 }
 
 constexpr std::string_view FetchNextDerivativeQuery = R"~~~~~~(
-SELECT e.configuration_id, e.type_id, c.temperature, e.mean, e.std_dev, o.mean, o.std_dev
+SELECT e.configuration_id, e.type_id, c.temperature_numerator, c.temperature_denominator, e.mean, e.std_dev, o.mean, o.std_dev
 FROM "estimates" e
 INNER JOIN "configurations" c ON e.configuration_id = c.configuration_id AND c.simulation_id = @simulation_id AND c.active_worker_id IS NULL
 INNER JOIN "estimates" o ON e.configuration_id = o.configuration_id AND o.type_id = CASE WHEN e.type_id BETWEEN 0 AND 1 THEN mod(e.type_id + 1, 2) ELSE mod(e.type_id - 1, 2) + 2 END
@@ -399,11 +400,11 @@ std::optional<NextDerivative> SQLiteStorage::next_derivative(const int simulatio
 		if (!next_derivative_stmt.executeStep()) return std::nullopt;
 		const auto configuration_id = next_derivative_stmt.getColumn(0).getInt();
 		const auto type = static_cast<observables::Type>(next_derivative_stmt.getColumn(1).getInt());
-		const auto temperature = next_derivative_stmt.getColumn(2).getDouble();
-		const auto mean = next_derivative_stmt.getColumn(3).getDouble();
-		const auto std_dev = next_derivative_stmt.getColumn(4).getDouble();
-		const auto square_mean = next_derivative_stmt.getColumn(5).getDouble();
-		const auto square_std_dev = next_derivative_stmt.getColumn(6).getDouble();
+		const auto temperature = utils::ratio { next_derivative_stmt.getColumn(2).getInt(), next_derivative_stmt.getColumn(3).getInt() };
+		const auto mean = next_derivative_stmt.getColumn(4).getDouble();
+		const auto std_dev = next_derivative_stmt.getColumn(5).getDouble();
+		const auto square_mean = next_derivative_stmt.getColumn(6).getDouble();
+		const auto square_std_dev = next_derivative_stmt.getColumn(7).getDouble();
 
 		SQLite::Statement worker { db, SetConfigurationActiveWorker.data() };
 		worker.bind("@configuration_id", configuration_id);

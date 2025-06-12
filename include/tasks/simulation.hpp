@@ -28,7 +28,7 @@ namespace tasks {
 		}
 
 		std::tuple<std::vector<double_t>, observables::Map> execute_task(const Chunk & chunk) override {
-			Lattice lattice {chunk.lattice_size, 1.0 / chunk.temperature, chunk.spins};
+			Lattice lattice {chunk.lattice_size, chunk.temperature.inverse(), chunk.spins};
 			openrand::Tyche rng { std::random_device{}(), 0 };
 
 			auto [energy, magnets] = algorithms::simulate(lattice, chunk.sweeps, rng, sweeps[chunk.algorithm]);

@@ -31,14 +31,10 @@ double_t utils::mm256_reduce_add_pd(const simde__m256d v) {
     return simde_mm_cvtsd_f64(simde_mm_add_sd(low, high64));
 }
 
-std::vector<double_t> utils::sweep_through_temperature(const double_t max_temperature, const std::size_t steps) {
-    std::vector<double_t> result (steps);
-    const auto norm = 1.0 / static_cast<double_t>(steps);
-
-    std::ranges::generate(result, [&, n = 0.0] mutable {
-        return n += max_temperature *norm;
-    });
-    return result;
+std::generator<utils::ratio> utils::sweep_through_temperature(const int32_t max_temperature, const int32_t steps) {
+    for (const auto n : std::ranges::views::iota(1, steps + 1)) {
+        co_yield { n * max_temperature, steps };
+    }
 }
 
 std::vector<double_t> utils::square_elements(const std::span<double> & span) {
