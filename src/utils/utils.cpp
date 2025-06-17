@@ -39,6 +39,6 @@ std::generator<utils::ratio> utils::sweep_through_temperature(const int32_t max_
 
 std::vector<double_t> utils::square_elements(const std::span<double> & span) {
     std::vector<double> result (span.size());
-    std::ranges::transform(span, result.begin(), [] (const double_t v) { return std::pow(v, 2); });
+    std::ranges::transform(span, result.begin(), [] (const double_t v) { return std::pow(v, 2.0); });
     return result;
 }

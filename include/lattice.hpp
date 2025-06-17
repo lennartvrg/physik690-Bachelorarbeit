@@ -36,8 +36,8 @@ public:
     [[nodiscard]] std::vector<double_t> get_spins() const noexcept;
 
 private:
-    double_t beta;
-    std::size_t length;
+    const double_t beta;
+    const std::size_t length;
     std::vector<double_t> spins;
 };
 

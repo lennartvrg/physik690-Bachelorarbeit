@@ -330,7 +330,7 @@ std::optional<std::tuple<Estimate, std::vector<double_t>>> SQLiteStorage::next_e
 		result_stmt.bind("@configuration_id", configuration_id);
 		result_stmt.bind("@type_id", type);
 
-		std::vector<double_t> values {};
+		std::vector<double_t> values;
 		while (result_stmt.executeStep()) {
 			const auto buffer = result_stmt.getColumn(1).getBlob();
 			const auto data = schemas::deserialize(buffer);
@@ -340,11 +340,7 @@ std::optional<std::tuple<Estimate, std::vector<double_t>>> SQLiteStorage::next_e
 		}
 		transaction.commit();
 
-		if (values.empty()) {
-			std::cout << "No results found for " << configuration_id << " type " << type << std::endl;
-		}
-
-		return std::optional(std::make_tuple<Estimate, std::vector<double_t>>({ configuration_id, type, bootstrap_resamples }, std::move(values)));
+		return { std::make_tuple<Estimate, std::vector<double_t>>({ configuration_id, type, bootstrap_resamples }, std::move(values)) };
 	} catch (std::exception & e) {
 		std::cout << "[SQLite] Failed to fetch next estimate. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
@@ -384,9 +380,9 @@ constexpr std::string_view FetchNextDerivativeQuery = R"~~~~~~(
 SELECT e.configuration_id, e.type_id, c.temperature_numerator, c.temperature_denominator, e.mean, e.std_dev, o.mean, o.std_dev
 FROM "estimates" e
 INNER JOIN "configurations" c ON e.configuration_id = c.configuration_id AND c.simulation_id = @simulation_id AND c.active_worker_id IS NULL
-INNER JOIN "estimates" o ON e.configuration_id = o.configuration_id AND o.type_id = CASE WHEN e.type_id BETWEEN 0 AND 1 THEN mod(e.type_id + 1, 2) ELSE mod(e.type_id - 1, 2) + 2 END
-LEFT JOIN "estimates" t ON e.configuration_id = t.configuration_id AND t.type_id = CASE WHEN e.type_id BETWEEN 0 AND 1 THEN 4 ELSE 5 END
-WHERE (e.type_id BETWEEN 0 AND 3) AND (t.configuration_id IS NULL)
+INNER JOIN "estimates" o ON e.configuration_id = o.configuration_id AND o.type_id = CASE WHEN e.type_id = 0 THEN 1 ELSE 3 END
+LEFT JOIN "estimates" t ON e.configuration_id = t.configuration_id AND t.type_id = CASE WHEN e.type_id = 0 THEN 4 ELSE 5 END
+WHERE (e.type_id = 0 OR e.type_id = 2) AND (t.configuration_id IS NULL)
 LIMIT 1
 )~~~~~~";
 

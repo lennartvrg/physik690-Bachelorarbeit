@@ -15,7 +15,6 @@ namespace tasks {
 
 	template<typename TStorage> requires std::is_base_of_v<Storage, TStorage>
 	class Simulation final : public Task<TStorage, Chunk, std::tuple<std::vector<double_t>, observables::Map>> {
-
 	public:
 		template<typename ... Args>
 		explicit Simulation(const Config & config, Args && ... args) : Task<TStorage, Chunk, std::tuple<std::vector<double_t>, observables::Map>>(config, std::forward<Args>(args)...) {
@@ -28,9 +27,10 @@ namespace tasks {
 		}
 
 		std::tuple<std::vector<double_t>, observables::Map> execute_task(const Chunk & chunk) override {
-			Lattice lattice {chunk.lattice_size, chunk.temperature.inverse(), chunk.spins};
-			openrand::Tyche rng { std::random_device{}(), 0 };
+			thread_local std::random_device rd;
+			openrand::Tyche rng { rd(), rd() };
 
+			Lattice lattice {chunk.lattice_size, chunk.temperature.inverse(), chunk.spins};
 			auto [energy, magnets] = algorithms::simulate(lattice, chunk.sweeps, rng, sweeps[chunk.algorithm]);
 			auto [energy_sqr, magnets_sqr] = std::make_tuple(utils::square_elements(energy), utils::square_elements(magnets));
 
@@ -42,9 +42,9 @@ namespace tasks {
 
 			return { lattice.get_spins(), {
 				{ observables::Type::Energy, { e_tau, analysis::thermalize_and_block(energy, e_tau, chunk.skip_thermalization()) } },
-				{ observables::Type::EnergySquared, { e_tau, analysis::thermalize_and_block(energy_sqr, e_sqr_tau, chunk.skip_thermalization()) } },
+				{ observables::Type::EnergySquared, { e_sqr_tau, analysis::thermalize_and_block(energy_sqr, e_sqr_tau, chunk.skip_thermalization()) } },
 				{ observables::Type::Magnetization, { m_tau, analysis::thermalize_and_block(magnets, m_tau, chunk.skip_thermalization()) } },
-				{ observables::Type::MagnetizationSquared, { m_tau, analysis::thermalize_and_block(magnets_sqr, m_sqr_tau, chunk.skip_thermalization()) } }
+				{ observables::Type::MagnetizationSquared, { m_sqr_tau, analysis::thermalize_and_block(magnets_sqr, m_sqr_tau, chunk.skip_thermalization()) } }
 			}};
 		}
 

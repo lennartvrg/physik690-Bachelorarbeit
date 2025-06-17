@@ -18,17 +18,7 @@ namespace algorithms {
      *
      * @tparam N The factor of PI
      */
-    template<const std::size_t N> constexpr double_t N_PI = N * std::numbers::pi;
-
-    /**
-     * The acceptance probability on the uniform distribution [0.0, 1.0).
-     */
-    static thread_local std::uniform_real_distribution ACCEPTANCE {0.0, 1.0};
-
-    /**
-     * The random angle on the uniform distribution [0, 2PI)
-     */
-    static thread_local std::uniform_real_distribution ANGLE {0.0, N_PI<2>};
+    template<const std::size_t N> constexpr double_t N_PI = static_cast<double_t>(N) * std::numbers::pi;
 
     using function = std::function<std::tuple<double_t, std::tuple<double_t, double_t>>(Lattice&, openrand::Tyche&)>;
 

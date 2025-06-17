@@ -41,7 +41,7 @@ namespace tasks {
 
 	private:
 		static std::tuple<double_t, double_t> specific_heat(const utils::ratio temperature, const double_t mean, const double_t std_dev, const double_t square_mean, const double_t square_std_dev) {
-			const auto norm = std::pow(temperature.inverse().approx(), 2.0);
+			const auto norm = temperature.inverse().square().approx();
 			const auto cv_mean = (square_mean - std::pow(mean, 2.0)) * norm;
 			const auto cv_std_dev = std::sqrt(std::pow(square_std_dev * norm, 2.0) + std::pow(2.0 * mean * std_dev * norm, 2.0));
 			return { cv_mean, cv_std_dev };

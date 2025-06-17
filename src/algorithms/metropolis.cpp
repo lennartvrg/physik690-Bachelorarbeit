@@ -14,7 +14,7 @@
  */
 std::tuple<double_t, std::tuple<double_t, double_t>> algorithms::metropolis(Lattice & lattice, openrand::Tyche & rng) noexcept {
     // Prepares the result objects containing the total change of energy and magnetization
-    double chg_energy = 0.0, chg_magnet_cos = 0.0, chg_magnet_sin = 0.0;
+    double_t chg_energy = 0.0, chg_magnet_cos = 0.0, chg_magnet_sin = 0.0;
 
     // Go over all lattice sites and propose a new angle for the spin at the site
     for (std::size_t i = 0; i < lattice.num_sites(); ++i) {

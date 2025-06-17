@@ -10,6 +10,7 @@ namespace utils {
 
 		[[nodiscard]] double_t approx() const;
 		[[nodiscard]] ratio inverse() const;
+		[[nodiscard]] ratio square() const;
 
 		const int32_t numerator;
 		const int32_t denominator;
