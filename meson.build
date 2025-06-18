@@ -19,12 +19,14 @@ tomlplusplus_dep = tomlplusplus.get_variable('tomlplusplus_dep')
 json = subproject('json')
 json_dep = json.get_variable('nlohmann_json_dep')
 
+boost_dep = dependency('boost', required: true)
 fftw3_dep = dependency('fftw3', version: '>= 3.0.0', required: true)
 
 dependencies = [
   sqlite_dep,
   simde_dep,
   fftw3_dep,
+  boost_dep,
   tomlplusplus_dep,
   json_dep
 ]
@@ -49,7 +51,7 @@ exe = executable(
   'src/storage/sqlite_storage.cpp',
   'src/main.cpp',
   cpp_args: ['-march=native', '-ffast-math'],
-  link_args: ['-march=native', '-ltbb'],
+  link_args: ['-march=native', '-ltbb', '-lm'],
   include_directories: incdir,
   install : true,
   dependencies : dependencies,

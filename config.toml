@@ -1,14 +1,21 @@
 [simulation]
 identifier = 1
-bootstrap_resamples = 1000
+bootstrap_resamples = 40000
 
 [temperature]
 max = 3
-steps = 96
+steps = 64
 
 [metropolis]
-num_chunks = 1
-sweeps_per_chunk = 20000
+num_chunks = 5
+sweeps_per_chunk = 40000
 sizes = [
-    20, 40, 60, 80, 100
+    20, 40, 60, 80, 100, 120, 140
+]
+
+[wolff]
+num_chunks = 20
+sweeps_per_chunk = 40000
+sizes = [
+    20, 40, 60, 80, 100, 120, 140
 ]

@@ -4,7 +4,7 @@
 
 #include "algorithms/wolff.hpp"
 
-std::tuple<double_t, std::tuple<double_t, double_t>> algorithms::wolff(Lattice & lattice, openrand::Tyche & rng) noexcept {
+std::tuple<double_t, std::tuple<double_t, double_t>> algorithms::wolff(Lattice & lattice, openrand::Philox & rng) noexcept {
     // Prepares the result objects containing the total change of energy and magnetization
     auto chg_energy = 0.0, chg_magnet_cos = 0.0, chg_magnet_sin = 0.0;
 

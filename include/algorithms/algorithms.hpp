@@ -4,7 +4,7 @@
 #include <tuple>
 #include <functional>
 #include <random>
-#include <openrand/tyche.h>
+#include <openrand/philox.h>
 
 #include "lattice.hpp"
 
@@ -20,9 +20,9 @@ namespace algorithms {
      */
     template<const std::size_t N> constexpr double_t N_PI = static_cast<double_t>(N) * std::numbers::pi;
 
-    using function = std::function<std::tuple<double_t, std::tuple<double_t, double_t>>(Lattice&, openrand::Tyche&)>;
+    using function = std::function<std::tuple<double_t, std::tuple<double_t, double_t>>(Lattice&, openrand::Philox&)>;
 
-    std::tuple<std::vector<double_t>, std::vector<double_t>> simulate(Lattice & lattice, std::size_t sweeps, openrand::Tyche & rng, const function & sweep) noexcept;
+    std::tuple<std::vector<double_t>, std::vector<double_t>> simulate(Lattice & lattice, std::size_t sweeps, openrand::Philox & rng, const function & sweep) noexcept;
 }
 
 #endif //ALGORITHM_HPP

@@ -20,7 +20,7 @@ namespace tasks {
 
 		std::tuple<double_t, double_t> execute_task(const std::tuple<Estimate, std::vector<double_t>> & task) override {
 			thread_local std::random_device rd;
-			openrand::Tyche rng { rd(), rd() };
+			openrand::Philox rng { rd(), rd() };
 
 			const auto [estimate, values] = task;
 			return analysis::bootstrap_blocked(rng, values, estimate.bootstrap_resamples);
