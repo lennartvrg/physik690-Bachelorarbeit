@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "utils/ratio.hpp"
+#include "utils/utils.hpp"
 
 class Lattice {
 public:
@@ -38,7 +39,7 @@ public:
 private:
     const double_t beta;
     const std::size_t length;
-    std::vector<double_t> spins;
+    utils::aligned_vector<double_t> spins;
 };
 
 #endif

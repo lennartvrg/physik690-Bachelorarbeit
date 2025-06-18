@@ -4,11 +4,15 @@
 #include <string>
 #include <vector>
 #include <generator>
+#include <boost/align/aligned_allocator.hpp>
 #include <simde/x86/avx.h>
 
 #include "utils/ratio.hpp"
 
 namespace utils {
+	template<typename T>
+	using aligned_vector = std::vector<T, boost::alignment::aligned_allocator<T, 32>>;
+
 	std::string hostname();
 
 	int64_t timestamp_ms();

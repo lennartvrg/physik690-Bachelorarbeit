@@ -1,4 +1,5 @@
 #include "analysis/autocorrelation.hpp"
+#include "utils/utils.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -14,11 +15,11 @@ static std::complex<double_t> fold(const std::complex<double_t> x) {
 	return x * std::conj(x);
 }
 
-static void discrete_fourier_transform(std::vector<std::complex<double_t>> & in, std::vector<std::complex<double_t>> & out, const int direction) {
+static void discrete_fourier_transform(utils::aligned_vector<std::complex<double_t>> & in, utils::aligned_vector<std::complex<double_t>> & out, const int direction) {
 	assert(in.size() == out.size() && "Input and output vectors must be of same size");
 
 	std::unique_lock lock {mtx};
-	const auto plan = fftw_plan_dft_1d(static_cast<int>(in.size()), reinterpret_cast<fftw_complex*>(in.data()), reinterpret_cast<fftw_complex*>(out.data()), direction, FFTW_ESTIMATE | FFTW_UNALIGNED);
+	const auto plan = fftw_plan_dft_1d(static_cast<int>(in.size()), reinterpret_cast<fftw_complex*>(in.data()), reinterpret_cast<fftw_complex*>(out.data()), direction, FFTW_ESTIMATE);
 	lock.unlock();
 
 	fftw_execute_dft(plan, reinterpret_cast<fftw_complex*>(in.data()), reinterpret_cast<fftw_complex*>(out.data()));
@@ -32,7 +33,7 @@ std::vector<double_t> normalized_autocorrelation_function(const std::span<double
 	assert(!data.empty() && "Input data must not be empty");
 	const auto mean = std::ranges::fold_left(data, 0.0, std::plus()) / static_cast<double_t>(data.size());
 
-	std::vector<std::complex<double_t>> in (data.size()), out (data.size());
+	utils::aligned_vector<std::complex<double_t>> in (data.size()), out (data.size());
 	std::ranges::transform(data, in.begin(), [&] (const auto x) {
 		return std::complex<double_t>(x - mean, 0.0);
 	});
