@@ -5,7 +5,7 @@
 #include <simde/x86/sse2.h>
 
 #include "lattice.hpp"
-#include "../include/utils/utils.hpp"
+#include "utils/utils.hpp"
 #include "algorithms/algorithms.hpp"
 
 Lattice::Lattice(const std::size_t length, const utils::ratio beta, const std::optional<std::vector<double_t>> & spins) : beta(beta.approx()), length(length), spins(spins.value_or(std::vector<double_t> (length * length))) {
@@ -23,14 +23,14 @@ double_t Lattice::energy() const noexcept {
     simde__m256d result = simde_mm256_setzero_pd();
     for (std::size_t i = 0; i < num_sites(); i += 2) {
         const auto sites = num_sites();
-        const simde__m256d old = simde_mm256_set_pd(spins[i], spins[i], spins[(i + 1) % sites], spins[(i + 1) % sites]);
+        const simde__m256d old = simde_mm256_set_pd(spins[i], spins[i], spins[i + 1], spins[i + 1]);
         const simde__m256d neighbours = simde_mm256_set_pd(spins[(i + 1) % sites], spins[(i + length) % sites], spins[(i + 2) % sites],
                                                      spins[(i + 1 + length) % sites]);
 
-        const simde__m256d diff = simde_mm256_sub_pd(neighbours, old);
+        const simde__m256d diff = simde_mm256_sub_pd(old, neighbours);
         const simde__m256d cos = simde_mm256_cos_pd(diff);
 
-        result = simde_mm256_add_pd(cos, result);
+        result = simde_mm256_add_pd(result, cos);
     }
     return -utils::mm256_reduce_add_pd(result);
 }
@@ -58,7 +58,7 @@ std::tuple<double_t, double_t> Lattice::magnetization() const noexcept {
         const simde__m256d sin = simde_mm256_sincos_pd(&cos, data);
 
         const simde__m256d add = simde_mm256_hadd_pd(cos, sin);
-        result = simde_mm256_add_pd(add, result);
+        result = simde_mm256_add_pd(result, add);
     }
     return {result[0] + result[2], result[1] + result[3]};
 }

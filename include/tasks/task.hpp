@@ -33,6 +33,7 @@ namespace tasks {
 			// The maximum number of workers is equal to the hardware concurrency
 			std::atomic_size_t workers { 0 };
 			const auto max_workers = std::thread::hardware_concurrency();
+			//const auto max_workers = 1;
 
 			// As long as there are new tasks, we want to delegate the task to a new worker
 			while (const std::optional<TTask> in = next_task(storage)) {

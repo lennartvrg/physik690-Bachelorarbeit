@@ -14,15 +14,18 @@ static std::complex<double_t> fold(const std::complex<double_t> x) {
 	return x * std::conj(x);
 }
 
-static void discrete_fourier_transform(const std::span<std::complex<double_t>> & in, const std::span<std::complex<double_t>> & out, const int direction) {
+static void discrete_fourier_transform(std::vector<std::complex<double_t>> & in, std::vector<std::complex<double_t>> & out, const int direction) {
 	assert(in.size() == out.size() && "Input and output vectors must be of same size");
-	std::unique_lock lock {mtx};
 
-	const auto plan = fftw_plan_dft_1d(static_cast<int>(in.size()), reinterpret_cast<fftw_complex*>(in.data()), reinterpret_cast<fftw_complex*>(out.data()), direction, FFTW_ESTIMATE);
+	std::unique_lock lock {mtx};
+	const auto plan = fftw_plan_dft_1d(static_cast<int>(in.size()), reinterpret_cast<fftw_complex*>(in.data()), reinterpret_cast<fftw_complex*>(out.data()), direction, FFTW_ESTIMATE | FFTW_UNALIGNED);
 	lock.unlock();
 
 	fftw_execute_dft(plan, reinterpret_cast<fftw_complex*>(in.data()), reinterpret_cast<fftw_complex*>(out.data()));
+
+	lock.lock();
 	fftw_destroy_plan(plan);
+	lock.unlock();
 }
 
 std::vector<double_t> normalized_autocorrelation_function(const std::span<double_t> & data) {
