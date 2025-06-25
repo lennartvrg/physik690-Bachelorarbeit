@@ -1,4 +1,3 @@
-#include <nlohmann/json.hpp>
 #include <iostream>
 #include <SQLiteCpp/Transaction.h>
 
@@ -30,17 +29,6 @@ BEGIN
 	UPDATE "workers" SET "last_active_at" = unixepoch() WHERE "worker_id" = NEW."active_worker_id";
 END;
 
-CREATE TABLE IF NOT EXISTS "autocorrelation" (
-	autocorrelation_id		INTEGER				NOT NULL,
-	type_id					INTEGER				NOT NULL,
-
-	data					BYTEA				NOT NULL,
-
-	CONSTRAINT "PK.Autocorrelation_AutocorrelationId_TypeId" PRIMARY KEY (autocorrelation_id, type_id),
-	CONSTRAINT "FK.Autocorrelation_TypeId" FOREIGN KEY (type_id) REFERENCES "types" (type_id)
-);
-
-
 CREATE TABLE IF NOT EXISTS "chunks" (
 	chunk_id				INTEGER				NOT NULL,
 
@@ -64,6 +52,22 @@ CREATE TABLE IF NOT EXISTS "chunks" (
 CREATE UNIQUE INDEX IF NOT EXISTS "IX.Chunks_ConfigurationId_Index" ON "chunks" ("configuration_id", "index");
 
 
+CREATE TABLE IF NOT EXISTS "autocorrelations" (
+	configuration_id		INTEGER				NOT NULL,
+	type_id					INTEGER				NOT NULL,
+
+	chunk_id				INTEGER				NOT NULL,
+	data					BLOB				NOT NULL,
+
+	CONSTRAINT "PK.Autocorrelations_ConfigurationId_TypeId" PRIMARY KEY (configuration_id, type_id),
+	CONSTRAINT "Fk.Autocorrelations_ConfigurationId" FOREIGN KEY (configuration_id) REFERENCES "configurations" (configuration_id),
+	CONSTRAINT "FK.Autocorrelations_ChunkId" FOREIGN KEY (chunk_id) REFERENCES "chunks" (chunk_id),
+	CONSTRAINT "FK.Autocorrelations_TypeId" FOREIGN KEY (type_id) REFERENCES "types" (type_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "IX.Autocorrelations_ChunkId_TypeId" ON "autocorrelations" ("chunk_id", "type_id");
+
+
 CREATE TABLE IF NOT EXISTS "results" (
 	chunk_id				INTEGER				NOT NULL,
 	type_id					INTEGER				NOT NULL,
@@ -81,7 +85,7 @@ constexpr std::string_view RegisterWorkerQuery = R"~~~~~~(
 INSERT INTO "workers" (name, last_active_at) VALUES (@name, @last_active_at) RETURNING "worker_id"
 )~~~~~~";
 
-SQLiteStorage::SQLiteStorage(const std::string_view & path) : worker_id(-1), db(path, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE | SQLite::OPEN_FULLMUTEX) {
+SQLiteStorage::SQLiteStorage(const std::string_view & path) : worker_id(-1), db(path, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE | SQLite::OPEN_NOMUTEX) {
 	try {
 		db.setBusyTimeout(10000);
 		db.exec("PRAGMA foreign_keys = ON");
@@ -241,6 +245,10 @@ constexpr std::string_view InsertChunkQuery = R"~~~~~~(
 INSERT INTO "chunks" (configuration_id, "index", start_time, end_time, worker_id, spins) VALUES (@configuration_id, @index, @start_time, @end_time, @worker_id, @spins) RETURNING chunk_id
 )~~~~~~";
 
+constexpr std::string_view InsertAutocorrelationQuery = R"~~~~~~(
+INSERT INTO "autocorrelations" (configuration_id, type_id, chunk_id, data) VALUES (@configuration_id, @type_id, @chunk_id, @data)
+)~~~~~~";
+
 constexpr std::string_view InsertResultQuery = R"~~~~~~(
 INSERT INTO "results" (chunk_id, type_id, tau, data) VALUES (@chunk_id, @type_id, @tau, @data)
 )~~~~~~";
@@ -249,7 +257,7 @@ constexpr std::string_view RemoveWorkerQuery = R"~~~~~~(
 UPDATE "configurations" SET active_worker_id = NULL WHERE "configuration_id" = @configuration_id AND "active_worker_id" = @worker_id
 )~~~~~~";
 
-void SQLiteStorage::save_chunk(const Chunk & chunk, const int64_t start_time, const int64_t end_time, const std::span<const uint8_t> & spins, const std::map<observables::Type, std::tuple<double_t, std::vector<uint8_t>>> & results) {
+void SQLiteStorage::save_chunk(const Chunk & chunk, const int64_t start_time, const int64_t end_time, const std::span<const uint8_t> & spins, const std::map<observables::Type, std::tuple<double_t, std::vector<uint8_t>, std::optional<std::vector<uint8_t>>>> & results) {
 	try {
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
@@ -265,15 +273,25 @@ void SQLiteStorage::save_chunk(const Chunk & chunk, const int64_t start_time, co
 		while (chunk_stmt.executeStep()) chunk_id = chunk_stmt.getColumn(0).getInt();
 
 		SQLite::Statement result { db, InsertResultQuery.data() };
+		SQLite::Statement autocorrelation_stmt { db, InsertAutocorrelationQuery.data() };
+
 		for (const auto & [key, value] : results) {
-			const auto [tau, data] = value;
+			const auto [tau, values, autocorrelation_opt] = value;
 			result.bind("@chunk_id", chunk_id);
 			result.bind("@type_id", key);
 			result.bind("@tau", tau);
-			result.bind("@data", data.data(), static_cast<int>(data.size()));
-
+			result.bind("@data", values.data(), static_cast<int>(values.size()));
 			result.exec();
 			result.reset();
+
+			if (const auto autocorrelation = autocorrelation_opt) {
+				autocorrelation_stmt.bind("@configuration_id", chunk.configuration_id);
+				autocorrelation_stmt.bind("@type_id", key);
+				autocorrelation_stmt.bind("@chunk_id", chunk_id);
+				autocorrelation_stmt.bind("@data", autocorrelation->data(), static_cast<int>(autocorrelation->size()));
+				autocorrelation_stmt.exec();
+				autocorrelation_stmt.reset();
+			}
 		}
 
 		SQLite::Statement worker_stmt { db, RemoveWorkerQuery.data() };
@@ -294,7 +312,7 @@ FROM "simulations" s
 INNER JOIN "configurations" c ON c.simulation_id = s.simulation_id
 INNER JOIN "metadata" m ON c.metadata_id = m.metadata_id
 INNER JOIN "chunks" ch ON c.configuration_id = ch.configuration_id AND ch."index" = m.num_chunks
-CROSS JOIN "types" t ON t.type_id BETWEEN 0 AND 3
+CROSS JOIN "types" t ON t.type_id BETWEEN 0 AND 3 OR t.type_id = 6
 LEFT JOIN "estimates" e ON e.configuration_id = c.configuration_id AND e.type_id = t.type_id
 WHERE s.simulation_id = @simulation_id AND c.active_worker_id IS NULL AND e.type_id IS NULL
 LIMIT 1

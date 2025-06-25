@@ -27,13 +27,14 @@ std::vector<double_t> analysis::thermalize_and_block(const std::span<double_t> &
     return blocking(skip_thermalization ? data : thermalize(data, tau), tau);
 }
 
-double_t sample_with_replacement(openrand::Philox & rng, const std::vector<double_t> & data) {
+double_t sample_with_replacement(XoshiroCpp::Xoshiro256Plus & rng, const std::vector<double_t> & data) {
+    std::uniform_int_distribution<std::size_t> range {0, data.size() - 1 };
     return std::ranges::fold_left(data, 0.0, [&] (const auto sum, const auto) {
-        return sum + data[rng.range(data.size())];
+        return sum + data[range(rng)];
     }) / static_cast<double_t>(data.size());
 }
 
-std::tuple<double_t, double_t> analysis::bootstrap_blocked(openrand::Philox & rng, const std::vector<double_t> & blocked, const std::size_t n) {
+std::tuple<double_t, double_t> analysis::bootstrap_blocked(XoshiroCpp::Xoshiro256Plus & rng, const std::vector<double_t> & blocked, const std::size_t n) {
     std::vector<double_t> resamples (n);
     std::ranges::generate(resamples, [&] {
         return sample_with_replacement(rng, blocked);
@@ -42,9 +43,9 @@ std::tuple<double_t, double_t> analysis::bootstrap_blocked(openrand::Philox & rn
     const auto mean = std::ranges::fold_left(blocked, 0.0, std::plus()) / static_cast<double_t>(blocked.size());
     const auto tmp = std::ranges::fold_left(resamples, 0.0, std::plus()) / static_cast<double_t>(resamples.size());
 
-    const auto std_dev = std::ranges::fold_left(resamples, 0.0, [&] (const auto sum, const auto x) {
+    const auto variance = std::ranges::fold_left(resamples, 0.0, [&] (const auto sum, const auto x) {
         return sum + std::pow(tmp - x, 2.0);
     } ) / static_cast<double_t>(resamples.size() - 1);
 
-    return {mean, std_dev};
+    return {mean, std::sqrt(variance)};
 }

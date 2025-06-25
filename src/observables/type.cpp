@@ -7,7 +7,9 @@ constexpr std::string_view TypeStrings[] =
 	"Magnetization",
 	"Magnetization squared",
 	"Specific heat",
-	"Magnetic susceptibility"
+	"Magnetic susceptibility",
+	"Helicity modulus",
+	"Cluster size"
 };
 
 std::ostream& observables::operator<<(std::ostream& out, const Type value) {

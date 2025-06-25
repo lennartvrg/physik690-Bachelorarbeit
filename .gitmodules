@@ -13,3 +13,6 @@
 [submodule "thirdparty/OpenRAND"]
 	path = thirdparty/OpenRAND
 	url = git@github.com:msu-sparta/OpenRAND.git
+[submodule "thirdparty/Xoshiro-cpp"]
+	path = thirdparty/Xoshiro-cpp
+	url = git@github.com:Reputeless/Xoshiro-cpp.git

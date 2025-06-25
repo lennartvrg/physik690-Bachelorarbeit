@@ -29,6 +29,9 @@ public:
     [[nodiscard]] double_t energy() const noexcept;
     [[nodiscard]] double_t energy_diff(std::size_t i, double_t angle) const noexcept;
 
+    [[nodiscard]] double_t helicity_modulus() const noexcept;
+    [[nodiscard]] double_t helicity_modulus_diff(std::size_t i, double_t angle) const noexcept;
+
     [[nodiscard]] std::tuple<double_t, double_t> magnetization() const noexcept;
     [[nodiscard]] std::tuple<double_t, double_t> magnetization_diff(std::size_t i, double_t angle) const noexcept;
 
@@ -40,6 +43,9 @@ private:
     const double_t beta;
     const std::size_t length;
     utils::aligned_vector<double_t> spins;
+
+    [[nodiscard]] double_t shift_row(std::size_t i, int32_t delta) const noexcept;
+    [[nodiscard]] double_t shift_col(std::size_t i, int32_t delta) const noexcept;
 };
 
 #endif

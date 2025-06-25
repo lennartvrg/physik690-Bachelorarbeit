@@ -49,7 +49,7 @@ namespace tasks {
 
 		static std::tuple<double_t, double_t> magnetic_susceptibility(const utils::ratio temperature, const double_t mean, const double_t std_dev, const double_t square_mean, const double_t square_std_dev) {
 			const auto norm = temperature.inverse().approx();
-			const auto xs_mean = square_mean * norm - std::pow(mean, 2.0) * norm;
+			const auto xs_mean = norm * square_mean - norm * mean * mean;
 			const auto xs_std_dev = std::sqrt(std::pow(square_std_dev * norm, 2.0) + std::pow(2.0 * mean * std_dev * norm, 2.0));
 			return { xs_mean, xs_std_dev };
 		}

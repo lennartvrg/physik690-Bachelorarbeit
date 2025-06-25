@@ -22,8 +22,8 @@ struct Chunk final {
 
 	std::optional<std::vector<double_t>> spins;
 
-	[[nodiscard]] bool skip_thermalization() const {
-		return index > 1;
+	[[nodiscard]] bool first() const {
+		return index == 1;
 	}
 };
 

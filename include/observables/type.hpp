@@ -14,11 +14,13 @@ namespace observables {
 		MagnetizationSquared = 3,
 		SpecificHeat = 4,
 		MagneticSusceptibility = 5,
+		HelicityModulus = 6,
+		ClusterSize = 7,
 	};
 
 	std::ostream& operator<<(std::ostream& out, Type value);
 
-	using Map = std::map<Type, std::tuple<double_t, std::vector<double_t>>>;
+	using Map = std::map<Type, std::tuple<double_t, std::vector<double_t>, std::optional<std::vector<double_t>>>>;
 }
 
 #endif //TYPE_HPP

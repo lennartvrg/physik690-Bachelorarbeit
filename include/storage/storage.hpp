@@ -15,7 +15,7 @@ public:
 
 	virtual std::optional<Chunk> next_chunk(int simulation_id) = 0;
 
-	virtual void save_chunk(const Chunk & chunk, int64_t start_time, int64_t end_time, const std::span<const uint8_t> & spins, const std::map<observables::Type, std::tuple<double_t, std::vector<uint8_t>>> & results) = 0;
+	virtual void save_chunk(const Chunk & chunk, int64_t start_time, int64_t end_time, const std::span<const uint8_t> & spins, const std::map<observables::Type, std::tuple<double_t, std::vector<uint8_t>, std::optional<std::vector<uint8_t>>>> & results) = 0;
 
 	virtual std::optional<std::tuple<Estimate, std::vector<double_t>>> next_estimate(int simulation_id) = 0;
 

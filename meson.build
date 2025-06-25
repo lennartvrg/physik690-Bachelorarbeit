@@ -16,9 +16,6 @@ simde_dep = simde.get_variable('simde_dep')
 tomlplusplus = subproject('tomlplusplus')
 tomlplusplus_dep = tomlplusplus.get_variable('tomlplusplus_dep')
 
-json = subproject('json')
-json_dep = json.get_variable('nlohmann_json_dep')
-
 boost_dep = dependency('boost', required: true)
 fftw3_dep = dependency('fftw3', version: '>= 3.0.0', required: true)
 
@@ -27,11 +24,10 @@ dependencies = [
   simde_dep,
   fftw3_dep,
   boost_dep,
-  tomlplusplus_dep,
-  json_dep
+  tomlplusplus_dep
 ]
 
-incdir = include_directories(['include', 'thirdparty/OpenRAND/include'])
+incdir = include_directories(['include', 'thirdparty/Xoshiro-cpp'])
 run_command('flatc', '--cpp', '-o', 'include/schemas', 'schemas/vector.fbs', check: true)
 
 exe = executable(
@@ -51,7 +47,7 @@ exe = executable(
   'src/storage/sqlite_storage.cpp',
   'src/main.cpp',
   cpp_args: ['-march=native', '-ffast-math'],
-  link_args: ['-march=native', '-ltbb', '-lm'],
+  link_args: ['-march=native', '-ltbb'],
   include_directories: incdir,
   install : true,
   dependencies : dependencies,
