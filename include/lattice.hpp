@@ -23,8 +23,20 @@ public:
         return beta;
     }
 
+    [[nodiscard]] constexpr std::size_t shift_row(std::size_t i, int32_t delta) const noexcept {
+        const auto sites = num_sites();
+        return (i + sites + delta * length) % sites;
+    }
+
+    [[nodiscard]] constexpr std::size_t shift_col(std::size_t i, int32_t delta) const noexcept {
+        const auto sites = num_sites();
+        const auto row = i % sites / length * length;
+        const auto col = (i % length + length + delta) % length;
+        return row + col;
+    }
+
     void set(std::size_t i, double_t angle) noexcept;
-    double operator[] (std::size_t i) const { return spins[i]; }
+    double operator[] (const std::size_t i) const { return spins[i]; }
 
     [[nodiscard]] double_t energy() const noexcept;
     [[nodiscard]] double_t energy_diff(std::size_t i, double_t angle) const noexcept;
@@ -43,9 +55,6 @@ private:
     const double_t beta;
     const std::size_t length;
     utils::aligned_vector<double_t> spins;
-
-    [[nodiscard]] double_t shift_row(std::size_t i, int32_t delta) const noexcept;
-    [[nodiscard]] double_t shift_col(std::size_t i, int32_t delta) const noexcept;
 };
 
 #endif

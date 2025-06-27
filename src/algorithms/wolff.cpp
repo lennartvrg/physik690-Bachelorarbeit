@@ -44,10 +44,7 @@ std::tuple<double_t, double_t, std::tuple<double_t, double_t>, int32_t> algorith
         chg_magnet_sin += magnet_sin_diff;
 
         // Find neighboring spins
-        const std::size_t neighbors[4] = {(i + 1) % lattice.num_sites(),
-                                            (i + lattice.num_sites() - 1) % lattice.num_sites(),
-                                            (i + lattice.side_length()) % lattice.num_sites(),
-                                            (i + lattice.num_sites() - lattice.side_length()) % lattice.num_sites()};
+        const std::size_t neighbors[4] = {lattice.shift_col(i, 1), lattice.shift_col(i, -1), lattice.shift_row(i, 1), lattice.shift_row(i, -1)};
 
         // Calculate dot product of neighbors for the old angle
         const auto prop_i= std::cos(old_angle - reference_angle);

@@ -20,24 +20,12 @@ void Lattice::set(const std::size_t i, const double_t angle) noexcept {
     spins[i % num_sites()] = angle;
 }
 
-double_t Lattice::shift_row(const std::size_t i, const int32_t delta) const noexcept {
-    const auto sites = num_sites();
-    return spins[(i + sites + delta * length) % sites];
-}
-
-double_t Lattice::shift_col(const std::size_t i, const int32_t delta) const noexcept {
-    const auto sites = num_sites();
-    const auto row = i % sites / length * length;
-    const auto col = (i % length + length + delta) % length;
-    return spins[row + col];
-}
-
-
 double_t Lattice::energy() const noexcept {
     simde__m256d result = simde_mm256_setzero_pd();
     for (std::size_t i = 0; i < num_sites(); i += 2) {
         const simde__m256d old = simde_mm256_set_pd(spins[i], spins[i], spins[i + 1], spins[i + 1]);
-        const simde__m256d neighbours = simde_mm256_set_pd(shift_col(i, 1), shift_row(i, 1), shift_col(i + 1, 1), shift_row(i + 1, 1));
+        const simde__m256d neighbours = simde_mm256_set_pd(spins[shift_col(i, 1)], spins[shift_row(i, 1)],
+            spins[shift_col(i + 1, 1)], spins[shift_row(i + 1, 1)]);
 
         const simde__m256d diff = simde_mm256_sub_pd(old, neighbours);
         const simde__m256d cos = simde_mm256_cos_pd(diff);
@@ -48,7 +36,7 @@ double_t Lattice::energy() const noexcept {
 }
 
 double_t Lattice::energy_diff(const std::size_t i, const double_t angle) const noexcept {
-    const simde__m256d neighbours = simde_mm256_set_pd(shift_col(i, 1), shift_col(i, -1), shift_row(i, 1), shift_row(i, -1));
+    const simde__m256d neighbours = simde_mm256_set_pd(spins[shift_col(i, 1)], spins[shift_col(i, -1)], spins[shift_row(i, 1)], spins[shift_row(i, -1)]);
 
     const simde__m256d a = simde_mm256_set1_pd(spins[i]);
     const simde__m256d before = simde_mm256_cos_pd(simde_mm256_sub_pd(a, neighbours));
@@ -63,7 +51,7 @@ double_t Lattice::helicity_modulus() const noexcept {
     simde__m256d result = simde_mm256_setzero_pd();
     for (std::size_t i = 0; i < num_sites(); i += 4) {
         const simde__m256d data = simde_mm256_load_pd(spins.data() + i);
-        const simde__m256d neighbours = simde_mm256_set_pd(shift_col(i + 3, 1), shift_col(i + 2, 1), shift_col(i + 1, 1), shift_col(i, 1));
+        const simde__m256d neighbours = simde_mm256_set_pd(spins[shift_col(i + 3, 1)], spins[shift_col(i + 2, 1)], spins[shift_col(i + 1, 1)], spins[shift_col(i, 1)]);
 
         const simde__m256d pi = simde_mm256_set1_pd(algorithms::N_PI<2>);
         const simde__m256d diff = simde_mm256_sub_pd(simde_mm256_add_pd(data, pi), neighbours);
@@ -75,14 +63,14 @@ double_t Lattice::helicity_modulus() const noexcept {
 }
 
 double_t Lattice::helicity_modulus_diff(const std::size_t i, const double_t angle) const noexcept {
-    const simde__m256d data = simde_mm256_set_pd(spins[i], spins[i], angle, angle);
-    const simde__m256d neighbours = simde_mm256_set_pd(shift_col(i, 1), shift_col(i, -1), shift_col(i, 1), shift_col(i, -1));
+    const simde__m256d data = simde_mm256_set_pd(spins[i], angle, spins[shift_col(i, -1)], spins[shift_col(i, -1)]);
+    const simde__m256d neighbours = simde_mm256_set_pd(spins[shift_col(i, 1)], spins[shift_col(i, 1)], spins[i], angle);
 
     const simde__m256d pi = simde_mm256_set1_pd(algorithms::N_PI<2>);
     const simde__m256d diff = simde_mm256_sub_pd(simde_mm256_add_pd(data, pi), neighbours);
 
     const simde__m256d sin = simde_mm256_sin_pd(diff);
-    return sin[0] + sin[1] - (sin[2] + sin[3]);
+    return sin[0] + sin[2] - (sin[1] + sin[3]);
 }
 
 std::tuple<double_t, double_t> Lattice::magnetization() const noexcept {

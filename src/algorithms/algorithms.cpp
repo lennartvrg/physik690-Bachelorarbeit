@@ -28,7 +28,7 @@ static std::unordered_map<observables::Type, std::vector<double_t>> simulate_met
 		current_magnet_cos += get<0>(chg_magnet);
 		current_magnet_sin += get<1>(chg_magnet);
 		current_energy += chg_energy;
-		current_helicity_modulus = lattice.helicity_modulus();
+		current_helicity_modulus += chg_helicity_modulus;
 
 		energies[i] = current_energy * norm;
 		helicity_modulus[i] = std::pow(current_helicity_modulus, 2.0) * norm;
@@ -51,7 +51,7 @@ static std::unordered_map<observables::Type, std::vector<double_t>> simulate_wol
 		current_magnet_cos += get<0>(chg_magnet);
 		current_magnet_sin += get<1>(chg_magnet);
 		current_energy += chg_energy;
-		current_helicity_modulus = lattice.helicity_modulus();
+		current_helicity_modulus += chg_helicity_modulus;
 
 		clusters[i] = cluster_size * norm;
 		energies[i] = current_energy * norm;
