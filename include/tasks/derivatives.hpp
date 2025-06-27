@@ -31,6 +31,11 @@ namespace tasks {
 				return { observables::Type::MagneticSusceptibility, mean, std_dev };
 			}
 
+			if (task.type == observables::HelicityModulusFraction) {
+				const auto [mean, std_dev] = helicity_modulus(task.temperature, task.mean, task.std_dev, task.square_mean, task.square_std_dev);
+				return { observables::Type::HelicityModulus, mean, std_dev };
+			}
+
 			throw std::invalid_argument("Derivative type is neither energy or magnetization");
 		}
 
@@ -52,6 +57,13 @@ namespace tasks {
 			const auto xs_mean = norm * square_mean - norm * mean * mean;
 			const auto xs_std_dev = std::sqrt(std::pow(square_std_dev * norm, 2.0) + std::pow(2.0 * mean * std_dev * norm, 2.0));
 			return { xs_mean, xs_std_dev };
+		}
+
+		static std::tuple<double_t, double_t> helicity_modulus(const utils::ratio temperature, const double_t helicity, const double_t helicity_std_dev, const double_t energy_mean, const double_t energy_std_dev) {
+			const auto norm = temperature.inverse().approx();
+			const auto hm_mean = -energy_mean / 2.0 - norm * helicity;
+			const auto hm_std_dev = std::sqrt(std::pow(-energy_std_dev / 2.0, 2.0) + std::pow(norm * helicity_std_dev, 2.0));
+			return { hm_mean, hm_std_dev };
 		}
 	};
 }

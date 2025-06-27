@@ -28,14 +28,14 @@ static std::unordered_map<observables::Type, std::vector<double_t>> simulate_met
 		current_magnet_cos += get<0>(chg_magnet);
 		current_magnet_sin += get<1>(chg_magnet);
 		current_energy += chg_energy;
-		current_helicity_modulus += chg_helicity_modulus;
+		current_helicity_modulus = lattice.helicity_modulus();
 
 		energies[i] = current_energy * norm;
 		helicity_modulus[i] = std::pow(current_helicity_modulus, 2.0) * norm;
 		magnets[i] = std::sqrt(std::pow(current_magnet_cos, 2.0) + std::pow(current_magnet_sin, 2.0)) * norm;
 	}
 
-	return {{ observables::Type::Energy, energies }, { observables::Type::Magnetization, magnets }, { observables::Type::HelicityModulus, helicity_modulus }};
+	return {{ observables::Type::Energy, energies }, { observables::Type::Magnetization, magnets }, { observables::Type::HelicityModulusFraction, helicity_modulus }};
 }
 
 static std::unordered_map<observables::Type, std::vector<double_t>> simulate_wolff(Lattice & lattice, XoshiroCpp::Xoshiro256Plus & rng, const std::size_t sweeps) {
@@ -51,7 +51,7 @@ static std::unordered_map<observables::Type, std::vector<double_t>> simulate_wol
 		current_magnet_cos += get<0>(chg_magnet);
 		current_magnet_sin += get<1>(chg_magnet);
 		current_energy += chg_energy;
-		current_helicity_modulus += chg_helicity_modulus;
+		current_helicity_modulus = lattice.helicity_modulus();
 
 		clusters[i] = cluster_size * norm;
 		energies[i] = current_energy * norm;
@@ -61,7 +61,7 @@ static std::unordered_map<observables::Type, std::vector<double_t>> simulate_wol
 
 	return {
 		{observables::Type::Energy, energies}, {observables::Type::Magnetization, magnets},
-		{observables::Type::HelicityModulus, helicity_modulus}, {observables::Type::ClusterSize, clusters}
+		{observables::Type::HelicityModulusFraction, helicity_modulus}, {observables::Type::ClusterSize, clusters}
 	};
 }
 

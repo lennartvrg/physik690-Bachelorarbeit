@@ -14,8 +14,9 @@ namespace observables {
 		MagnetizationSquared = 3,
 		SpecificHeat = 4,
 		MagneticSusceptibility = 5,
-		HelicityModulus = 6,
-		ClusterSize = 7,
+		HelicityModulusFraction = 6,
+		HelicityModulus = 7,
+		ClusterSize = 8
 	};
 
 	std::ostream& operator<<(std::ostream& out, Type value);

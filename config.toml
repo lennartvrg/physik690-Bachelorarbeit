@@ -4,18 +4,18 @@ bootstrap_resamples = 4000
 
 [temperature]
 max = 2
-steps = 32
+steps = 128
 
 [metropolis]
 num_chunks = 1
 sweeps_per_chunk = 40000
 sizes = [
-    20, 40, 60
+    20, 40
 ]
 
 [wolff]
 num_chunks = 1
 sweeps_per_chunk = 40000
 sizes = [
-    20, 40, 60
+    20, 40, 60, 80
 ]

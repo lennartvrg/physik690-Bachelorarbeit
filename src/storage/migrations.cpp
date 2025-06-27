@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS "types" (
 	CONSTRAINT "PK.Types_TypeId" PRIMARY KEY (type_id)
 );
 
-INSERT INTO "types" (type_id, name) VALUES (0, 'Energy'), (1, 'Energy Squared'), (2, 'Magnetization'), (3, 'Magnetization Squared'), (4, 'Specific Heat'), (5, 'Magnetic Susceptibility'), (6, 'Helicity Modulus'), (7, 'Cluster Size')
+INSERT INTO "types" (type_id, name) VALUES (0, 'Energy'), (1, 'Energy Squared'), (2, 'Magnetization'), (3, 'Magnetization Squared'), (4, 'Specific Heat'), (5, 'Magnetic Susceptibility'), (6, 'Helicity Modulus Fraction'), (7, 'Helicity Modulus'), (8, 'Cluster size')
 ON CONFLICT DO NOTHING;
 
 

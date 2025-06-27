@@ -398,9 +398,9 @@ constexpr std::string_view FetchNextDerivativeQuery = R"~~~~~~(
 SELECT e.configuration_id, e.type_id, c.temperature_numerator, c.temperature_denominator, e.mean, e.std_dev, o.mean, o.std_dev
 FROM "estimates" e
 INNER JOIN "configurations" c ON e.configuration_id = c.configuration_id AND c.simulation_id = @simulation_id AND c.active_worker_id IS NULL
-INNER JOIN "estimates" o ON e.configuration_id = o.configuration_id AND o.type_id = CASE WHEN e.type_id = 0 THEN 1 ELSE 3 END
-LEFT JOIN "estimates" t ON e.configuration_id = t.configuration_id AND t.type_id = CASE WHEN e.type_id = 0 THEN 4 ELSE 5 END
-WHERE (e.type_id = 0 OR e.type_id = 2) AND (t.configuration_id IS NULL)
+INNER JOIN "estimates" o ON e.configuration_id = o.configuration_id AND o.type_id = CASE WHEN e.type_id = 0 THEN 1 WHEN e.type_id = 2 THEN 3 ELSE 0 END
+LEFT JOIN "estimates" t ON e.configuration_id = t.configuration_id AND t.type_id = CASE WHEN e.type_id = 0 THEN 4 WHEN e.type_id = 2 THEN 5 ELSE 7 END
+WHERE (e.type_id = 0 OR e.type_id = 2 OR e.type_id = 6) AND (t.configuration_id IS NULL)
 LIMIT 1
 )~~~~~~";
 
