@@ -444,6 +444,7 @@ void SQLiteStorage::worker_keep_alive() {
 
 		SQLite::Statement worker { db, UpdateWorkerLastActive.data() };
 		worker.bind("@worker_id", worker_id);
+		worker.exec();
 
 		transaction.commit();
 	} catch (std::exception & e) {

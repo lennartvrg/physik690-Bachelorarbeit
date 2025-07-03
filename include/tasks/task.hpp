@@ -4,6 +4,7 @@
 #include <memory>
 #include <mutex>
 #include <atomic>
+#include <condition_variable>
 #include <thread>
 #include <queue>
 #include <optional>
@@ -26,47 +27,60 @@ namespace tasks {
 		}
 
 		void execute() {
-			// The queue holds the task results
-			std::mutex queue_mutex;
-			std::queue<std::tuple<TTask, int64_t, int64_t, TResult>> queue {};
+			// Keeping track of worker threads
+			std::vector<std::thread> workers;
+			std::unique_lock lock_tasks { available_tasks_mutex };
 
-			// The maximum number of workers is equal to the hardware concurrency
-			std::atomic_size_t workers { 0 };
-			const auto max_workers = std::thread::hardware_concurrency();
-			//const auto max_workers = 1;
-
-			// As long as there are new tasks, we want to delegate the task to a new worker
-			while (const std::optional<TTask> in = next_task(storage)) {
-				workers.fetch_add(1, std::memory_order_seq_cst);
-
-				// Starting to process the task on a new thread
-				std::thread([&] (const TTask & value) {
-					const auto start_time_ms = utils::timestamp_ms();
-					const auto result = execute_task(value);
-					const auto end_time_ms = utils::timestamp_ms();
-
-					// Add the task result to the queue
-					const std::unique_lock lock { queue_mutex };
-					queue.push({ value, start_time_ms, end_time_ms, result });
-
-					// Indicate that the thread is finished
-					workers.fetch_sub(1, std::memory_order_seq_cst);
-					workers.notify_one();
-				}, *in).detach();
-
-				// Wait until one worker has finished and save the queue
-				while (workers == max_workers) {
-					workers.wait(max_workers);
+			// Create worker threads and fetch initial tasks
+			for (std::size_t i = 0; i < std::thread::hardware_concurrency(); ++i) {
+				workers.emplace_back(&Task::execute_worker, this);
+				if (const auto task = next_task(this->storage)) {
+					available_tasks.push(*task);
 				}
-				save_queue(queue, queue_mutex);
-				storage->worker_keep_alive();
 			}
 
-			// Wait until all workers are finished and drain the remaining queue
-			for (std::size_t value; (value = workers.load(std::memory_order_seq_cst)) != 0;) {
-				workers.wait(value);
+			// Start workers
+			lock_tasks.unlock();
+			available_tasks_signal.notify_all();
+
+			// Wait for results
+			while (true) {
+				std::unique_lock lock { available_results_signal_mutex };
+				available_results_signal.wait_for(lock, std::chrono::seconds(3), [&] {
+					const std::unique_lock result_lock { available_results_mutex };
+					return !available_results.empty();
+				});
+				lock.unlock();
+
+				// Save the complete queue and send keep alive message
+				save_queue(available_results, available_results_mutex);
+				this->storage->worker_keep_alive();
+
+				// Fill missing tasks
+				lock_tasks.lock();
+				for (std::size_t i = 0; i < idle_workers; ++i) {
+					if (const auto task = next_task(this->storage)) {
+						available_tasks.push(*task);
+					}
+				}
+
+				const auto empty = available_tasks.empty();
+				lock_tasks.unlock();
+
+				available_tasks_signal.notify_all();
+				if (idle_workers == std::thread::hardware_concurrency() && empty) {
+					break;
+				}
 			}
-			save_queue(queue, queue_mutex);
+
+			// Wait for all workers to finish
+			exit_flag = true;
+			for (auto & worker : workers) {
+				worker.join();
+			}
+
+			// Save the complete queue
+			save_queue(available_results, available_results_mutex);
 		}
 
 	protected:
@@ -84,6 +98,70 @@ namespace tasks {
 
 		/// The underlying storage engine for this task.
 		std::shared_ptr<TStorage> storage;
+
+		std::atomic_bool exit_flag;
+
+		std::atomic_uint idle_workers;
+
+		std::mutex available_tasks_mutex;
+
+		std::queue<TTask> available_tasks;
+
+		std::mutex available_tasks_signal_mutex;
+
+		std::condition_variable available_tasks_signal;
+
+		std::mutex available_results_mutex;
+
+		std::queue<std::tuple<TTask, int64_t, int64_t, TResult>> available_results;
+
+		std::mutex available_results_signal_mutex;
+
+		std::condition_variable available_results_signal;
+
+		void execute_worker() {
+			while (!exit_flag) {
+				// Signal that the worker is looking for a task
+				++idle_workers;
+
+				// Wait for an incoming task
+				std::unique_lock lock { available_tasks_signal_mutex };
+				available_tasks_signal.wait_for(lock, std::chrono::seconds(3), [&] {
+					const std::unique_lock tasks_lock { available_tasks_mutex };
+					return !available_tasks.empty() || exit_flag;
+				});
+				lock.unlock();
+
+				// Worker busy and exit flag handling
+				if (exit_flag) {
+					break;
+				}
+				--idle_workers;
+
+				// Get the task from the queue
+				std::unique_lock lock_tasks { available_tasks_mutex };
+				if (available_tasks.empty()) {
+					continue;
+				}
+				const auto task = available_tasks.front();
+
+				// Remove task from queue
+				available_tasks.pop();
+				lock_tasks.unlock();
+
+				// Execute the task
+				const auto start_time_ms = utils::timestamp_ms();
+				const auto result = execute_task(task);
+				const auto end_time_ms = utils::timestamp_ms();
+
+				// Push to the result queue
+				std::unique_lock lock_results { available_results_mutex };
+				available_results.push({ task, start_time_ms, end_time_ms, result });
+
+				// Signal the result is ready
+				available_results_signal.notify_one();
+			}
+		}
 
 		void save_queue(std::queue<std::tuple<TTask, int64_t, int64_t, TResult>> & queue, std::mutex & queue_mutex) {
 			const std::unique_lock lock { queue_mutex };
