@@ -1,3 +1,6 @@
+#ifndef MIGRATIONS_HPP
+#define MIGRATIONS_HPP
+
 #include <string_view>
 
 constexpr std::string_view MIGRATIONS = R"~~~~~~(
@@ -106,3 +109,5 @@ CREATE TABLE IF NOT EXISTS "estimates" (
 	CONSTRAINT "FK.Estimates_TypeId" FOREIGN KEY (type_id) REFERENCES "types" (type_id)
 );
 )~~~~~~";
+
+#endif //MIGRATIONS_HPP

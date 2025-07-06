@@ -3,7 +3,7 @@
 
 #include "utils/utils.hpp"
 #include "storage/sqlite_storage.hpp"
-#include "migrations.cpp"
+#include "storage/migrations.hpp"
 #include "schemas/serialize.hpp"
 
 constexpr std::string_view SQLITE_MIGRATIONS = R"~~~~~~(
@@ -143,7 +143,7 @@ INSERT INTO "configurations" (simulation_id, metadata_id, lattice_size, temperat
 ON CONFLICT DO NOTHING
 )~~~~~~";
 
-void SQLiteStorage::prepare_simulation(const Config config) {
+bool SQLiteStorage::prepare_simulation(const Config config) {
 	try {
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
@@ -198,6 +198,7 @@ void SQLiteStorage::prepare_simulation(const Config config) {
 		}
 
 		transaction.commit();
+		return false;
 	} catch (std::exception & e) {
 		std::cout << "[SQLite] Failed to prepare simulation. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());

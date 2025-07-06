@@ -11,7 +11,7 @@ class Storage {
 public:
 	virtual ~Storage() = default;
 
-	virtual void prepare_simulation(Config config) = 0;
+	virtual bool prepare_simulation(Config config) = 0;
 
 	virtual std::optional<std::tuple<std::size_t, std::size_t>> next_vortex(int simulation_id) = 0;
 

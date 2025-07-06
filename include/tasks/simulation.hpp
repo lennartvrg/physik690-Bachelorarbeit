@@ -1,5 +1,5 @@
-#ifndef SIMULATE_SIZE_TASK_HPP
-#define SIMULATE_SIZE_TASK_HPP
+#ifndef SIMULATION_HPP
+#define SIMULATION_HPP
 
 #include "observables/type.hpp"
 #include "analysis/autocorrelation.hpp"
@@ -49,4 +49,4 @@ namespace tasks {
 	};
 }
 
-#endif //SIMULATE_SIZE_TASK_HPP
+#endif //SIMULATION_HPP

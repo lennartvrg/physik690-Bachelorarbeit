@@ -9,7 +9,7 @@ class SQLiteStorage final : public Storage {
 public:
 	explicit SQLiteStorage(const std::string_view & path);
 
-	void prepare_simulation(Config config) override;
+	bool prepare_simulation(Config config) override;
 
 	std::optional<std::tuple<std::size_t, std::size_t>> next_vortex(int simulation_id) override;
 

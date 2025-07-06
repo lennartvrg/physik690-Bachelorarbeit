@@ -10,6 +10,7 @@ project(
 sqlite = subproject('SQLiteCpp')
 sqlite_dep = sqlite.get_variable('sqlitecpp_dep')
 
+pq_dep = dependency('libpqxx', static: true, required: true)
 simde_dep = dependency('simde', static: true, required: true)
 boost_dep = dependency('boost', static: true, required: true)
 tomlplusplus_dep = dependency('tomlplusplus', static: true, required: true)
@@ -17,6 +18,7 @@ fftw3_dep = dependency('fftw3', static: true, version: '>= 3.0.0', required: tru
 
 dependencies = [
   sqlite_dep,
+  pq_dep,
   simde_dep,
   fftw3_dep,
   boost_dep,
@@ -40,7 +42,6 @@ exe = executable(
   'src/observables/type.cpp',
   'src/analysis/autocorrelation.cpp',
   'src/analysis/bootstrap.cpp',
-  'src/storage/migrations.cpp',
   'src/storage/sqlite_storage.cpp',
   'src/main.cpp',
   cpp_args: ['-march=native', '-ffast-math'],

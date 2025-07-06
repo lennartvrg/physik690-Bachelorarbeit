@@ -21,12 +21,6 @@ namespace tasks {
 
 		}
 
-		template<typename ... Args>
-		explicit Task(const Config & config, Args && ... args) : Task(config, std::make_shared<TStorage>(std::forward<Args>(args)...)) {
-			std::cout << "[Task] Preparing execution by running migrations" << std::endl;
-			storage->prepare_simulation(config);
-		}
-
 		virtual ~Task() {
 			std::cout << "[Task] Saved a total of " << counter << " results" << std::endl;
 		}
