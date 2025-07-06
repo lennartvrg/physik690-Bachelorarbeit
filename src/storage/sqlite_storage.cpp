@@ -90,10 +90,6 @@ BEGIN
 END;
 )~~~~~~";
 
-constexpr std::string_view RegisterWorkerQuery = R"~~~~~~(
-INSERT INTO "workers" (name, last_active_at) VALUES (@name, @last_active_at) RETURNING "worker_id"
-)~~~~~~";
-
 SQLiteStorage::SQLiteStorage(const std::string_view & path) : worker_id(-1), db(path, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE | SQLite::OPEN_NOMUTEX) {
 	try {
 		db.setBusyTimeout(10000);

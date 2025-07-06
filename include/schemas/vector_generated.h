@@ -8,9 +8,9 @@
 
 // Ensure the included flatbuffers.h is the same version as when this file was
 // generated, otherwise it may not be compatible.
-static_assert(FLATBUFFERS_VERSION_MAJOR == 2 &&
-              FLATBUFFERS_VERSION_MINOR == 0 &&
-              FLATBUFFERS_VERSION_REVISION == 8,
+static_assert(FLATBUFFERS_VERSION_MAJOR == 25 &&
+              FLATBUFFERS_VERSION_MINOR == 2 &&
+              FLATBUFFERS_VERSION_REVISION == 10,
              "Non-compatible flatbuffers version included");
 
 namespace schemas {
@@ -18,15 +18,15 @@ namespace schemas {
 struct Vector;
 struct VectorBuilder;
 
-struct Vector FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+struct Vector FLATBUFFERS_FINAL_CLASS : private ::flatbuffers::Table {
   typedef VectorBuilder Builder;
   enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
     VT_DATA = 4
   };
-  const flatbuffers::Vector<double> *data() const {
-    return GetPointer<const flatbuffers::Vector<double> *>(VT_DATA);
+  const ::flatbuffers::Vector<double> *data() const {
+    return GetPointer<const ::flatbuffers::Vector<double> *>(VT_DATA);
   }
-  bool Verify(flatbuffers::Verifier &verifier) const {
+  bool Verify(::flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffset(verifier, VT_DATA) &&
            verifier.VerifyVector(data()) &&
@@ -36,32 +36,32 @@ struct Vector FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
 
 struct VectorBuilder {
   typedef Vector Table;
-  flatbuffers::FlatBufferBuilder &fbb_;
-  flatbuffers::uoffset_t start_;
-  void add_data(flatbuffers::Offset<flatbuffers::Vector<double>> data) {
+  ::flatbuffers::FlatBufferBuilder &fbb_;
+  ::flatbuffers::uoffset_t start_;
+  void add_data(::flatbuffers::Offset<::flatbuffers::Vector<double>> data) {
     fbb_.AddOffset(Vector::VT_DATA, data);
   }
-  explicit VectorBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+  explicit VectorBuilder(::flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
   }
-  flatbuffers::Offset<Vector> Finish() {
+  ::flatbuffers::Offset<Vector> Finish() {
     const auto end = fbb_.EndTable(start_);
-    auto o = flatbuffers::Offset<Vector>(end);
+    auto o = ::flatbuffers::Offset<Vector>(end);
     return o;
   }
 };
 
-inline flatbuffers::Offset<Vector> CreateVector(
-    flatbuffers::FlatBufferBuilder &_fbb,
-    flatbuffers::Offset<flatbuffers::Vector<double>> data = 0) {
+inline ::flatbuffers::Offset<Vector> CreateVector(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
+    ::flatbuffers::Offset<::flatbuffers::Vector<double>> data = 0) {
   VectorBuilder builder_(_fbb);
   builder_.add_data(data);
   return builder_.Finish();
 }
 
-inline flatbuffers::Offset<Vector> CreateVectorDirect(
-    flatbuffers::FlatBufferBuilder &_fbb,
+inline ::flatbuffers::Offset<Vector> CreateVectorDirect(
+    ::flatbuffers::FlatBufferBuilder &_fbb,
     const std::vector<double> *data = nullptr) {
   auto data__ = data ? _fbb.CreateVector<double>(*data) : 0;
   return schemas::CreateVector(
@@ -70,32 +70,32 @@ inline flatbuffers::Offset<Vector> CreateVectorDirect(
 }
 
 inline const schemas::Vector *GetVector(const void *buf) {
-  return flatbuffers::GetRoot<schemas::Vector>(buf);
+  return ::flatbuffers::GetRoot<schemas::Vector>(buf);
 }
 
 inline const schemas::Vector *GetSizePrefixedVector(const void *buf) {
-  return flatbuffers::GetSizePrefixedRoot<schemas::Vector>(buf);
+  return ::flatbuffers::GetSizePrefixedRoot<schemas::Vector>(buf);
 }
 
 inline bool VerifyVectorBuffer(
-    flatbuffers::Verifier &verifier) {
+    ::flatbuffers::Verifier &verifier) {
   return verifier.VerifyBuffer<schemas::Vector>(nullptr);
 }
 
 inline bool VerifySizePrefixedVectorBuffer(
-    flatbuffers::Verifier &verifier) {
+    ::flatbuffers::Verifier &verifier) {
   return verifier.VerifySizePrefixedBuffer<schemas::Vector>(nullptr);
 }
 
 inline void FinishVectorBuffer(
-    flatbuffers::FlatBufferBuilder &fbb,
-    flatbuffers::Offset<schemas::Vector> root) {
+    ::flatbuffers::FlatBufferBuilder &fbb,
+    ::flatbuffers::Offset<schemas::Vector> root) {
   fbb.Finish(root);
 }
 
 inline void FinishSizePrefixedVectorBuffer(
-    flatbuffers::FlatBufferBuilder &fbb,
-    flatbuffers::Offset<schemas::Vector> root) {
+    ::flatbuffers::FlatBufferBuilder &fbb,
+    ::flatbuffers::Offset<schemas::Vector> root) {
   fbb.FinishSizePrefixed(root);
 }
 

@@ -14,25 +14,8 @@ CREATE TABLE IF NOT EXISTS "simulations" (
 );
 
 
-CREATE TABLE IF NOT EXISTS "vortices" (
-	vortex_id				INTEGER				NOT NULL,
-
-	simulation_id			INTEGER				NOT NULL,
-	lattice_size			INTEGER				NOT NULL CHECK (lattice_size > 0),
-
-	worker_id				INTEGER					NULL,
-
-	CONSTRAINT "PK.Vortices_VortexId" PRIMARY KEY (vortex_id),
-	CONSTRAINT "FK.Vortices_ActiveWorkerId" FOREIGN KEY (worker_id) REFERENCES "workers" (worker_id)
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS "IX.Vortices_SimulationId_LatticeSize" ON "vortices" (simulation_id, lattice_size);
-
-CREATE INDEX IF NOT EXISTS "IX.Vortices_ActiveWorkerId" ON "vortices" (worker_id);
-
-
 CREATE TABLE IF NOT EXISTS "metadata" (
-	metadata_id				INTEGER				NOT NULL,
+	metadata_id				INTEGER				NOT NULL GENERATED ALWAYS AS IDENTITY,
 
 	simulation_id			INTEGER				NOT NULL,
 	algorithm				INTEGER				NOT NULL CHECK (algorithm = 0 OR algorithm = 1),
@@ -47,7 +30,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "IX.Metadata_SimulationId_Algorithm" ON "metad
 
 
 CREATE TABLE IF NOT EXISTS "workers" (
-	worker_id				INTEGER				NOT NULL,
+	worker_id				INTEGER				NOT NULL GENERATED ALWAYS AS IDENTITY,
 
 	name					TEXT				NOT NULL CHECK (length(name) > 0),
 	last_active_at			BIGINT				NOT NULL,
@@ -59,7 +42,7 @@ CREATE INDEX IF NOT EXISTS "IX.Workers_LastActiveAt" ON "workers" (last_active_a
 
 
 CREATE TABLE IF NOT EXISTS "configurations" (
-	configuration_id		INTEGER				NOT NULL,
+	configuration_id		INTEGER				NOT NULL GENERATED ALWAYS AS IDENTITY,
 
 	active_worker_id		INTEGER					NULL,
 	simulation_id			INTEGER				NOT NULL,
@@ -96,7 +79,7 @@ CREATE TABLE IF NOT EXISTS "estimates" (
 
 	start_time				INTEGER				NOT NULL,
 	end_time				INTEGER				NOT NULL CHECK (end_time >= start_time),
-	time					INTEGER				GENERATED ALWAYS AS (end_time - start_time),
+	time					INTEGER				GENERATED ALWAYS AS (end_time - start_time) STORED,
 
 	mean					REAL				NOT NULL,
 	std_dev					REAL				NOT NULL,
@@ -105,6 +88,27 @@ CREATE TABLE IF NOT EXISTS "estimates" (
 	CONSTRAINT "FK.Estimates_ConfigurationId" FOREIGN KEY (configuration_id) REFERENCES "configurations" (configuration_id),
 	CONSTRAINT "FK.Estimates_TypeId" FOREIGN KEY (type_id) REFERENCES "types" (type_id)
 );
+
+
+CREATE TABLE IF NOT EXISTS "vortices" (
+	vortex_id				INTEGER				NOT NULL GENERATED ALWAYS AS IDENTITY,
+
+	simulation_id			INTEGER				NOT NULL,
+	lattice_size			INTEGER				NOT NULL CHECK (lattice_size > 0),
+
+	worker_id				INTEGER					NULL,
+
+	CONSTRAINT "PK.Vortices_VortexId" PRIMARY KEY (vortex_id),
+	CONSTRAINT "FK.Vortices_ActiveWorkerId" FOREIGN KEY (worker_id) REFERENCES "workers" (worker_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "IX.Vortices_SimulationId_LatticeSize" ON "vortices" (simulation_id, lattice_size);
+
+CREATE INDEX IF NOT EXISTS "IX.Vortices_ActiveWorkerId" ON "vortices" (worker_id);
+)~~~~~~";
+
+constexpr std::string_view RegisterWorkerQuery = R"~~~~~~(
+INSERT INTO "workers" (name, last_active_at) VALUES ($1, $2) RETURNING "worker_id"
 )~~~~~~";
 
 #endif //MIGRATIONS_HPP

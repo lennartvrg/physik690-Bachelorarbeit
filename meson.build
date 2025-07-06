@@ -42,6 +42,7 @@ exe = executable(
   'src/analysis/autocorrelation.cpp',
   'src/analysis/bootstrap.cpp',
   'src/storage/sqlite_storage.cpp',
+  'src/storage/postgres_storage.cpp',
   'src/main.cpp',
   cpp_args: ['-march=native', '-ffast-math'],
   link_args: ['-march=native'],
