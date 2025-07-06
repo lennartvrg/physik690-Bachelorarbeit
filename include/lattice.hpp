@@ -19,8 +19,12 @@ public:
         return length * length;
     }
 
-    [[nodiscard]] constexpr double_t get_beta() const noexcept {
+    [[nodiscard]] double_t get_beta() const noexcept {
         return beta;
+    }
+
+    void set_beta(const double_t beta) noexcept {
+        this->beta = beta;
     }
 
     [[nodiscard]] constexpr std::size_t shift_row(std::size_t i, int32_t delta) const noexcept {
@@ -52,7 +56,7 @@ public:
     [[nodiscard]] std::vector<double_t> get_spins() const noexcept;
 
 private:
-    const double_t beta;
+    double_t beta;
     const std::size_t length;
     utils::aligned_vector<double_t> spins;
 };

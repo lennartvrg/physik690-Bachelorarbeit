@@ -7,6 +7,16 @@
 #include "schemas/serialize.hpp"
 
 constexpr std::string_view SQLITE_MIGRATIONS = R"~~~~~~(
+CREATE TABLE IF NOT EXISTS "vortex_results" (
+	vortex_id				INTEGER				NOT NULL,
+	sweeps					INTEGER				NOT NULL,
+
+	temperature				REAL				NOT NULL,
+	spins					BLOB				NOT NULL,
+
+	CONSTRAINT "PK.VortexResults_VortexId_Sweeps" PRIMARY KEY (vortex_id, sweeps)
+);
+
 CREATE TRIGGER IF NOT EXISTS "TRG.RemoveInactiveWorkers"
 AFTER INSERT ON "workers" FOR EACH ROW
 BEGIN
@@ -21,21 +31,12 @@ BEGIN
 	) AND "last_active_at" < unixepoch('now', '-5 minutes');
 END;
 
-
-CREATE TRIGGER IF NOT EXISTS "TRG.UpdateWorkerLastActive"
-AFTER UPDATE OF "active_worker_id" ON "configurations"
-FOR EACH ROW WHEN NEW."active_worker_id" IS NOT NULL
-BEGIN
-	UPDATE "workers" SET "last_active_at" = unixepoch() WHERE "worker_id" = NEW."active_worker_id";
-END;
-
 CREATE TABLE IF NOT EXISTS "chunks" (
 	chunk_id				INTEGER				NOT NULL,
 
 	configuration_id		INTEGER				NOT NULL,
 	"index"					INTEGER				NOT NULL,
 
-	autocorrelation_id		INTEGER					NULL CHECK ((autocorrelation_id != NULL AND "index" = 0) OR (autocorrelation_id = NULL AND "index" != 0)),
 	worker_id				INTEGER				NOT NULL,
 
 	start_time				INTEGER				NOT NULL,
@@ -79,6 +80,14 @@ CREATE TABLE IF NOT EXISTS "results" (
 	CONSTRAINT "FK.Results_ChunkId" FOREIGN KEY (chunk_id) REFERENCES "chunks" (chunk_id),
 	CONSTRAINT "FK.Results_TypeId" FOREIGN KEY (type_id) REFERENCES "types" (type_id)
 );
+
+CREATE TRIGGER IF NOT EXISTS "TRG.RemoveOutdatedEstimates"
+AFTER INSERT ON "results" FOR EACH ROW
+BEGIN
+	DELETE FROM "estimates" WHERE type_id = NEW.type_id AND EXISTS (
+		SELECT * FROM "chunks" c WHERE c.chunk_id = NEW.chunk_id AND configuration_id = c.configuration_id
+	);
+END;
 )~~~~~~";
 
 constexpr std::string_view RegisterWorkerQuery = R"~~~~~~(
@@ -115,6 +124,11 @@ INSERT INTO "simulations" (simulation_id, bootstrap_resamples, created_at) VALUE
 ON CONFLICT DO UPDATE SET bootstrap_resamples = @bootstrap_resamples
 )~~~~~~";
 
+constexpr std::string_view InsertVorticesQuery = R"~~~~~~(
+INSERT INTO "vortices" (simulation_id, lattice_size) VALUES (@simulation_id, @lattice_size)
+ON CONFLICT DO NOTHING
+)~~~~~~";
+
 constexpr std::string_view InsertMetadataQuery = R"~~~~~~(
 INSERT INTO "metadata" (simulation_id, algorithm, num_chunks, sweeps_per_chunk) VALUES (@simulation_id, @algorithm, @num_chunks, @sweeps_per_chunk)
 ON CONFLICT DO UPDATE SET num_chunks = @num_chunks WHERE num_chunks < @num_chunks
@@ -139,6 +153,14 @@ void SQLiteStorage::prepare_simulation(const Config config) {
 		simulation.bind("@created_at", utils::timestamp_ms());
 		simulation.exec();
 
+		SQLite::Statement vortex { db, InsertVorticesQuery.data() };
+		for (const auto size : config.vortex_sizes) {
+			vortex.bind("@simulation_id", config.simulation_id);
+			vortex.bind("@lattice_size", static_cast<int>(size));
+			vortex.exec();
+			vortex.reset();
+		}
+
 		SQLite::Statement insert_metadata { db, InsertMetadataQuery.data() };
 		SQLite::Statement fetch_metadata { db, FetchMetadataQuery.data() };
 		SQLite::Statement configurations { db, InsertConfigurationsQuery.data() };
@@ -162,7 +184,7 @@ void SQLiteStorage::prepare_simulation(const Config config) {
 			fetch_metadata.reset();
 
 			for (const auto size : value.sizes) {
-				for (const auto temperature : utils::sweep_through_temperature(config.max_temperature, config.temperature_steps)) {
+				for (const auto temperature : utils::sweep_temperature(config.max_temperature, config.temperature_steps)) {
 					configurations.bind("@simulation_id", config.simulation_id);
 					configurations.bind("@metadata_id", metadata_id);
 					configurations.bind("@lattice_size", static_cast<int>(size));
@@ -178,6 +200,71 @@ void SQLiteStorage::prepare_simulation(const Config config) {
 		transaction.commit();
 	} catch (std::exception & e) {
 		std::cout << "[SQLite] Failed to prepare simulation. SQLite exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
+}
+
+constexpr std::string_view NextVortexQuery = R"~~~~~~(
+SELECT v."vortex_id", v."lattice_size" FROM "vortices" v WHERE v."simulation_id" = @simulation_id AND NOT EXISTS (
+	SELECT * FROM "vortex_results" vr WHERE vr.vortex_id = v.vortex_id
+) AND (
+	v."worker_id" IS NULL OR v."worker_id" IN (SELECT w."worker_id" FROM "workers" w WHERE w."last_active_at" < unixepoch('now', '-5 minutes'))
+);
+)~~~~~~";
+
+constexpr std::string_view SetVortexActiveWorkerId = R"~~~~~~(
+UPDATE "vortices" SET "worker_id" = @worker_id WHERE "vortex_id" = @vortex_id;
+)~~~~~~";
+
+std::optional<std::tuple<std::size_t, std::size_t>> SQLiteStorage::next_vortex(const int simulation_id) {
+	try {
+		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
+
+		SQLite::Statement next_vortex { db, NextVortexQuery.data() };
+		next_vortex.bind("@simulation_id", simulation_id);
+
+		if (!next_vortex.executeStep()) return std::nullopt;
+		const auto vortex_id = next_vortex.getColumn(0).getInt();
+		const auto lattice_size = next_vortex.getColumn(1).getInt();
+
+		SQLite::Statement worker { db, SetVortexActiveWorkerId.data() };
+		worker.bind("@vortex_id", vortex_id);
+		worker.bind("@worker_id", worker_id);
+
+		if (worker.exec() != 1) return std::nullopt;
+		transaction.commit();
+
+		return {{ static_cast<std::size_t>(vortex_id), static_cast<std::size_t>(lattice_size) }};
+	} catch (std::exception & e) {
+		std::cout << "[SQLite] Failed to fetch next vortex. SQLite exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
+}
+
+constexpr std::string_view InsertVortexResultsQuery = R"~~~~~~(
+INSERT INTO "vortex_results" (vortex_id, sweeps, temperature, spins) VALUES (@vortex_id, @sweeps, @temperature, @spins)
+)~~~~~~";
+
+void SQLiteStorage::save_vortices(const std::size_t vortex_id, std::vector<std::tuple<utils::ratio, std::size_t, std::vector<double_t>>> results) {
+	try {
+		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
+
+		SQLite::Statement save_stmt { db, InsertVortexResultsQuery.data() };
+		for (const auto & [temperature, sweeps, spins] : results) {
+			const auto data = schemas::serialize(spins);
+
+			save_stmt.bind("@vortex_id", static_cast<int>(vortex_id));
+			save_stmt.bind("@sweeps", static_cast<int>(sweeps));
+			save_stmt.bind("@temperature", temperature.approx());
+			save_stmt.bind("@spins", data.data(), static_cast<int>(data.size()));
+
+			save_stmt.exec();
+			save_stmt.reset();
+		}
+
+		transaction.commit();
+	} catch (std::exception & e) {
+		std::cout << "[SQLite] Failed to fetch save vortex results. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
 	}
 }
@@ -312,7 +399,7 @@ FROM "simulations" s
 INNER JOIN "configurations" c ON c.simulation_id = s.simulation_id
 INNER JOIN "metadata" m ON c.metadata_id = m.metadata_id
 INNER JOIN "chunks" ch ON c.configuration_id = ch.configuration_id AND ch."index" = m.num_chunks
-CROSS JOIN "types" t ON t.type_id BETWEEN 0 AND 3 OR t.type_id = 6
+CROSS JOIN "types" t ON t.type_id BETWEEN 0 AND 3 OR t.type_id = 6 OR (t.type_id = 8 AND m.algorithm = 1)
 LEFT JOIN "estimates" e ON e.configuration_id = c.configuration_id AND e.type_id = t.type_id
 WHERE s.simulation_id = @simulation_id AND c.active_worker_id IS NULL AND e.type_id IS NULL
 LIMIT 1
@@ -332,8 +419,8 @@ std::optional<std::tuple<Estimate, std::vector<double_t>>> SQLiteStorage::next_e
 
 		SQLite::Statement estimate_stmt { db, FetchNextEstimateQuery.data() };
 		estimate_stmt.bind("@simulation_id", simulation_id);
-
 		if (!estimate_stmt.executeStep()) return std::nullopt;
+
 		const auto configuration_id = estimate_stmt.getColumn(0).getInt();
 		const auto bootstrap_resamples = static_cast<std::size_t>(estimate_stmt.getColumn(1).getInt());
 		const auto num_chunks = estimate_stmt.getColumn(2).getInt();
@@ -348,7 +435,7 @@ std::optional<std::tuple<Estimate, std::vector<double_t>>> SQLiteStorage::next_e
 		result_stmt.bind("@configuration_id", configuration_id);
 		result_stmt.bind("@type_id", type);
 
-		std::vector<double_t> values;
+		std::vector<double_t> values {};
 		while (result_stmt.executeStep()) {
 			const auto buffer = result_stmt.getColumn(1).getBlob();
 			const auto data = schemas::deserialize(buffer);

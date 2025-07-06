@@ -1,18 +1,6 @@
 [submodule "thirdparty/SQLiteCpp"]
 	path = thirdparty/SQLiteCpp
 	url = git@github.com:SRombauts/SQLiteCpp.git
-[submodule "thirdparty/simde"]
-	path = thirdparty/simde
-	url = git@github.com:simd-everywhere/simde.git
-[submodule "thirdparty/tomlplusplus"]
-	path = thirdparty/tomlplusplus
-	url = git@github.com:marzer/tomlplusplus.git
-[submodule "thirdparty/json"]
-	path = thirdparty/json
-	url = git@github.com:nlohmann/json.git
-[submodule "thirdparty/OpenRAND"]
-	path = thirdparty/OpenRAND
-	url = git@github.com:msu-sparta/OpenRAND.git
 [submodule "thirdparty/Xoshiro-cpp"]
 	path = thirdparty/Xoshiro-cpp
 	url = git@github.com:Reputeless/Xoshiro-cpp.git

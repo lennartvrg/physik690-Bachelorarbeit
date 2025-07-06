@@ -19,7 +19,9 @@ namespace utils {
 
 	double_t mm256_reduce_add_pd(simde__m256d v);
 
-	std::generator<ratio> sweep_through_temperature(int32_t max_temperature, int32_t steps);
+	std::generator<ratio> sweep_temperature(int32_t max_temperature, int32_t steps);
+
+	std::generator<ratio> sweep_temperature_rev(int32_t max_temperature, int32_t steps);
 
 	std::vector<double_t> square_elements(const std::span<double_t> & span);
 }

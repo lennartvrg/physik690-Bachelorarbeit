@@ -1,7 +1,7 @@
 project(
   'xy_model',
   'cpp',
-  version : '0.1',
+  version : '1.0',
   meson_version : '>= 1.3.0',
   default_options : ['warning_level=2', 'cpp_std=c++23'],
   subproject_dir: 'thirdparty'
@@ -10,14 +10,10 @@ project(
 sqlite = subproject('SQLiteCpp')
 sqlite_dep = sqlite.get_variable('sqlitecpp_dep')
 
-simde = subproject('simde')
-simde_dep = simde.get_variable('simde_dep')
-
-tomlplusplus = subproject('tomlplusplus')
-tomlplusplus_dep = tomlplusplus.get_variable('tomlplusplus_dep')
-
-boost_dep = dependency('boost', required: true)
-fftw3_dep = dependency('fftw3', version: '>= 3.0.0', required: true)
+simde_dep = dependency('simde', static: true, required: true)
+boost_dep = dependency('boost', static: true, required: true)
+tomlplusplus_dep = dependency('tomlplusplus', static: true, required: true)
+fftw3_dep = dependency('fftw3', static: true, version: '>= 3.0.0', required: true)
 
 dependencies = [
   sqlite_dep,
@@ -29,6 +25,7 @@ dependencies = [
 
 incdir = include_directories(['include', 'thirdparty/Xoshiro-cpp'])
 run_command('flatc', '--cpp', '-o', 'include/schemas', 'schemas/vector.fbs', check: true)
+run_command('flatc', '--python', '-o', 'schemas/python', 'schemas/vector.fbs', check: true)
 
 exe = executable(
   'xy_model',

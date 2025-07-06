@@ -9,7 +9,7 @@
 #include <mutex>
 #include <ranges>
 
-static std::mutex mtx;
+static std::mutex ftw_planning_mutex;
 
 static std::complex<double_t> fold(const std::complex<double_t> x) {
 	return x * std::conj(x);
@@ -18,7 +18,7 @@ static std::complex<double_t> fold(const std::complex<double_t> x) {
 static void discrete_fourier_transform(utils::aligned_vector<std::complex<double_t>> & in, utils::aligned_vector<std::complex<double_t>> & out, const int direction) {
 	assert(in.size() == out.size() && "Input and output vectors must be of same size");
 
-	std::unique_lock lock {mtx};
+	std::unique_lock lock {ftw_planning_mutex};
 	const auto plan = fftw_plan_dft_1d(static_cast<int>(in.size()), reinterpret_cast<fftw_complex*>(in.data()), reinterpret_cast<fftw_complex*>(out.data()), direction, FFTW_ESTIMATE);
 	lock.unlock();
 
@@ -54,10 +54,10 @@ std::vector<double_t> normalized_autocorrelation_function(const std::span<double
 
 std::tuple<double_t, std::vector<double_t>> analysis::integrated_autocorrelation_time(const std::span<double_t> & data) {
 	const auto correlation = normalized_autocorrelation_function(data);
-	const auto positive = correlation | std::ranges::views::drop(1) | std::ranges::views::take_while([] (const double_t x) {
+	const auto positive = correlation | std::ranges::views::take_while([] (const double_t x) {
 		return x > 0.0;
 	});
 
-	const auto tau = std::ranges::fold_left(positive, 0.5, std::plus());
-	return {tau, correlation};
+	const auto tau = 0.5 + std::ranges::fold_left(positive | std::ranges::views::drop(1), 0.0, std::plus());
+	return {tau, std::ranges::to<std::vector>(positive) };
 }

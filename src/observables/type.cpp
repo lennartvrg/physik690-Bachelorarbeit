@@ -8,6 +8,7 @@ constexpr std::string_view TypeStrings[] =
 	"Magnetization squared",
 	"Specific heat",
 	"Magnetic susceptibility",
+	"Helicity modulus intermediate",
 	"Helicity modulus",
 	"Cluster size"
 };

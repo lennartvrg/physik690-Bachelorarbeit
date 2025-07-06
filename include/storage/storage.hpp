@@ -13,6 +13,10 @@ public:
 
 	virtual void prepare_simulation(Config config) = 0;
 
+	virtual std::optional<std::tuple<std::size_t, std::size_t>> next_vortex(int simulation_id) = 0;
+
+	virtual void save_vortices(std::size_t vortex_id, std::vector<std::tuple<utils::ratio, std::size_t, std::vector<double_t>>>) = 0;
+
 	virtual std::optional<Chunk> next_chunk(int simulation_id) = 0;
 
 	virtual void save_chunk(const Chunk & chunk, int64_t start_time, int64_t end_time, const std::span<const uint8_t> & spins, const std::map<observables::Type, std::tuple<double_t, std::vector<uint8_t>, std::optional<std::vector<uint8_t>>>> & results) = 0;

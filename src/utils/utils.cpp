@@ -31,9 +31,15 @@ double_t utils::mm256_reduce_add_pd(const simde__m256d v) {
     return simde_mm_cvtsd_f64(simde_mm_add_sd(low, high64));
 }
 
-std::generator<utils::ratio> utils::sweep_through_temperature(const int32_t max_temperature, const int32_t steps) {
+std::generator<utils::ratio> utils::sweep_temperature(const int32_t max_temperature, const int32_t steps) {
     for (const auto n : std::ranges::views::iota(1, steps + 1)) {
         co_yield { n * max_temperature, steps };
+    }
+}
+
+std::generator<utils::ratio> utils::sweep_temperature_rev(const int32_t max_temperature, const int32_t steps) {
+    for (const auto n : std::ranges::views::iota(0, steps)) {
+        co_yield { (steps - n) * max_temperature, steps };
     }
 }
 

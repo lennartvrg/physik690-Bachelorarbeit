@@ -31,7 +31,7 @@ namespace tasks {
 				return { observables::Type::MagneticSusceptibility, mean, std_dev };
 			}
 
-			if (task.type == observables::HelicityModulusFraction) {
+			if (task.type == observables::HelicityModulusIntermediate) {
 				const auto [mean, std_dev] = helicity_modulus(task.temperature, task.mean, task.std_dev, task.square_mean, task.square_std_dev);
 				return { observables::Type::HelicityModulus, mean, std_dev };
 			}

@@ -11,6 +11,23 @@ CREATE TABLE IF NOT EXISTS "simulations" (
 );
 
 
+CREATE TABLE IF NOT EXISTS "vortices" (
+	vortex_id				INTEGER				NOT NULL,
+
+	simulation_id			INTEGER				NOT NULL,
+	lattice_size			INTEGER				NOT NULL CHECK (lattice_size > 0),
+
+	worker_id				INTEGER					NULL,
+
+	CONSTRAINT "PK.Vortices_VortexId" PRIMARY KEY (vortex_id),
+	CONSTRAINT "FK.Vortices_ActiveWorkerId" FOREIGN KEY (worker_id) REFERENCES "workers" (worker_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "IX.Vortices_SimulationId_LatticeSize" ON "vortices" (simulation_id, lattice_size);
+
+CREATE INDEX IF NOT EXISTS "IX.Vortices_ActiveWorkerId" ON "vortices" (worker_id);
+
+
 CREATE TABLE IF NOT EXISTS "metadata" (
 	metadata_id				INTEGER				NOT NULL,
 
@@ -69,7 +86,7 @@ CREATE TABLE IF NOT EXISTS "types" (
 	CONSTRAINT "PK.Types_TypeId" PRIMARY KEY (type_id)
 );
 
-INSERT INTO "types" (type_id, name) VALUES (0, 'Energy'), (1, 'Energy Squared'), (2, 'Magnetization'), (3, 'Magnetization Squared'), (4, 'Specific Heat'), (5, 'Magnetic Susceptibility'), (6, 'Helicity Modulus Fraction'), (7, 'Helicity Modulus'), (8, 'Cluster size')
+INSERT INTO "types" (type_id, name) VALUES (0, 'Energy'), (1, 'Energy Squared'), (2, 'Magnetization'), (3, 'Magnetization Squared'), (4, 'Specific Heat'), (5, 'Magnetic Susceptibility'), (6, 'Helicity Modulus Intermediate'), (7, 'Helicity Modulus'), (8, 'Cluster size')
 ON CONFLICT DO NOTHING;
 
 

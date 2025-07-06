@@ -8,6 +8,7 @@
 #include <thread>
 #include <queue>
 #include <optional>
+#include <utility>
 
 #include "storage/storage.hpp"
 #include "utils/utils.hpp"
@@ -16,8 +17,12 @@ namespace tasks {
 	template<typename TStorage, typename TTask, typename TResult>
 	requires std::is_base_of_v<Storage, TStorage> class Task {
 	public:
+		Task(Config config, const std::shared_ptr<TStorage> storage) : config(std::move(config)), storage(storage) {
+
+		}
+
 		template<typename ... Args>
-		explicit Task(const Config & config, Args && ... args) : config(config), counter(0), storage(std::make_shared<TStorage>(std::forward<Args>(args)...)) {
+		explicit Task(const Config & config, Args && ... args) : Task(config, std::make_shared<TStorage>(std::forward<Args>(args)...)) {
 			std::cout << "[Task] Preparing execution by running migrations" << std::endl;
 			storage->prepare_simulation(config);
 		}
@@ -44,9 +49,9 @@ namespace tasks {
 			available_tasks_signal.notify_all();
 
 			// Wait for results
-			while (true) {
+			while (!exit_flag) {
 				std::unique_lock lock { available_results_signal_mutex };
-				available_results_signal.wait_for(lock, std::chrono::seconds(3), [&] {
+				available_results_signal.wait_for(lock, std::chrono::seconds(1), [&] {
 					const std::unique_lock result_lock { available_results_mutex };
 					return !available_results.empty();
 				});
@@ -69,12 +74,11 @@ namespace tasks {
 
 				available_tasks_signal.notify_all();
 				if (idle_workers == std::thread::hardware_concurrency() && empty) {
-					break;
+					exit_flag = true;
 				}
 			}
 
 			// Wait for all workers to finish
-			exit_flag = true;
 			for (auto & worker : workers) {
 				worker.join();
 			}
@@ -94,7 +98,7 @@ namespace tasks {
 
 	private:
 		/// A counter to keep track of how many results have been saved to storage.
-		std::size_t counter;
+		std::size_t counter {0};
 
 		/// The underlying storage engine for this task.
 		std::shared_ptr<TStorage> storage;
@@ -126,7 +130,7 @@ namespace tasks {
 
 				// Wait for an incoming task
 				std::unique_lock lock { available_tasks_signal_mutex };
-				available_tasks_signal.wait_for(lock, std::chrono::seconds(3), [&] {
+				available_tasks_signal.wait_for(lock, std::chrono::seconds(1), [&] {
 					const std::unique_lock tasks_lock { available_tasks_mutex };
 					return !available_tasks.empty() || exit_flag;
 				});

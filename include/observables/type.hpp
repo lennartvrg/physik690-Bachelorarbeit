@@ -14,7 +14,7 @@ namespace observables {
 		MagnetizationSquared = 3,
 		SpecificHeat = 4,
 		MagneticSusceptibility = 5,
-		HelicityModulusFraction = 6,
+		HelicityModulusIntermediate = 6,
 		HelicityModulus = 7,
 		ClusterSize = 8
 	};
