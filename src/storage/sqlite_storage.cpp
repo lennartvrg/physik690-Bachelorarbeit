@@ -197,7 +197,7 @@ bool SQLiteStorage::prepare_simulation(const Config config) {
 		}
 
 		transaction.commit();
-		return false;
+		return true;
 	} catch (std::exception & e) {
 		std::cout << "[SQLite] Failed to prepare simulation. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
@@ -307,7 +307,7 @@ std::optional<Chunk> SQLiteStorage::next_chunk(const int simulation_id) {
 		transaction.commit();
 
 		std::optional<std::vector<double_t>> spins = std::nullopt;
-		if (!next_chunk.getColumn(7).isNull()) {
+		if (!next_chunk.getColumn(6).isNull()) {
 			const auto buffer = next_chunk.getColumn(7).getBlob();
 			spins = schemas::deserialize(buffer);
 		}

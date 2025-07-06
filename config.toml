@@ -8,7 +8,7 @@ steps = 64
 max_zoom = 3
 
 [vortices]
-sizes = [ 64, 128 ]
+sizes = [ ]
 
 [metropolis]
 num_chunks = 2

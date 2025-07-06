@@ -11,7 +11,7 @@ sqlite = subproject('SQLiteCpp')
 sqlite_dep = sqlite.get_variable('sqlitecpp_dep')
 
 pq_dep = dependency('libpqxx', static: true, required: true)
-simde_dep = dependency('simde', static: true, required: true)
+tbb_dep = dependency('tbb', static: true, required: true)
 boost_dep = dependency('boost', static: true, required: true)
 tomlplusplus_dep = dependency('tomlplusplus', static: true, required: true)
 fftw3_dep = dependency('fftw3', static: true, version: '>= 3.0.0', required: true)
@@ -19,7 +19,7 @@ fftw3_dep = dependency('fftw3', static: true, version: '>= 3.0.0', required: tru
 dependencies = [
   sqlite_dep,
   pq_dep,
-  simde_dep,
+  tbb_dep,
   fftw3_dep,
   boost_dep,
   tomlplusplus_dep
@@ -44,7 +44,7 @@ exe = executable(
   'src/storage/sqlite_storage.cpp',
   'src/main.cpp',
   cpp_args: ['-march=native', '-ffast-math'],
-  link_args: ['-march=native', '-ltbb'],
+  link_args: ['-march=native'],
   include_directories: incdir,
   install : true,
   dependencies : dependencies,
