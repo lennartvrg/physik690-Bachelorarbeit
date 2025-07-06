@@ -3,8 +3,9 @@ identifier = 1
 bootstrap_resamples = 16000
 
 [temperature]
-max = 2
+max = 2.0
 steps = 64
+max_zoom = 3
 
 [vortices]
 sizes = [ 64, 128 ]

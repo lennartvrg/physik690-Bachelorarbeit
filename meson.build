@@ -32,7 +32,6 @@ run_command('flatc', '--python', '-o', 'schemas/python', 'schemas/vector.fbs', c
 exe = executable(
   'xy_model',
   'src/utils/utils.cpp',
-  'src/utils/ratio.cpp',
   'src/schemas/serialize.cpp',
   'src/config.cpp',
   'src/lattice.cpp',

@@ -70,14 +70,8 @@ static std::unordered_map<observables::Type, std::vector<double_t>> simulate_wol
 }
 
 std::unordered_map<observables::Type, std::vector<double_t>> algorithms::simulate(Lattice & lattice, XoshiroCpp::Xoshiro256Plus & rng, const std::size_t sweeps, const Algorithm algorithm) noexcept {
-	std::unordered_map<observables::Type, std::vector<double_t>> result;
-	for (auto & [type, values] : algorithm == WOLFF ? simulate_wolff(lattice, rng, sweeps) : simulate_metropolis(lattice, rng, sweeps)) {
-		if (type == observables::Energy) {
-			result[observables::EnergySquared] = utils::square_elements(values);
-		} else if (type == observables::Magnetization) {
-			result[observables::MagnetizationSquared] = utils::square_elements(values);
-		}
-		result[type] = values;
-	}
+	auto result = algorithm == WOLFF ? simulate_wolff(lattice, rng, sweeps) : simulate_metropolis(lattice, rng, sweeps);
+	result[observables::EnergySquared] = utils::square_elements(result[observables::Energy]);
+	result[observables::MagnetizationSquared] = utils::square_elements(result[observables::Magnetization]);
 	return result;
 }

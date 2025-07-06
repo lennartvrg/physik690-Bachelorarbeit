@@ -139,7 +139,7 @@ SELECT metadata_id FROM "metadata" WHERE simulation_id = @simulation_id AND algo
 )~~~~~~";
 
 constexpr std::string_view InsertConfigurationsQuery = R"~~~~~~(
-INSERT INTO "configurations" (simulation_id, metadata_id, lattice_size, temperature_numerator, temperature_denominator) VALUES (@simulation_id, @metadata_id, @lattice_size, @temperature_numerator, @temperature_denominator)
+INSERT INTO "configurations" (simulation_id, metadata_id, lattice_size, temperature) VALUES (@simulation_id, @metadata_id, @lattice_size, @temperature)
 ON CONFLICT DO NOTHING
 )~~~~~~";
 
@@ -184,12 +184,11 @@ bool SQLiteStorage::prepare_simulation(const Config config) {
 			fetch_metadata.reset();
 
 			for (const auto size : value.sizes) {
-				for (const auto temperature : utils::sweep_temperature(config.max_temperature, config.temperature_steps)) {
+				for (const auto temperature : utils::sweep_temperature(0.0, config.max_temperature, config.temperature_steps)) {
 					configurations.bind("@simulation_id", config.simulation_id);
 					configurations.bind("@metadata_id", metadata_id);
 					configurations.bind("@lattice_size", static_cast<int>(size));
-					configurations.bind("@temperature_numerator", temperature.numerator);
-					configurations.bind("@temperature_denominator", temperature.denominator);
+					configurations.bind("@temperature", temperature);
 
 					configurations.exec();
 					configurations.reset();
@@ -246,7 +245,7 @@ constexpr std::string_view InsertVortexResultsQuery = R"~~~~~~(
 INSERT INTO "vortex_results" (vortex_id, sweeps, temperature, spins) VALUES (@vortex_id, @sweeps, @temperature, @spins)
 )~~~~~~";
 
-void SQLiteStorage::save_vortices(const std::size_t vortex_id, std::vector<std::tuple<utils::ratio, std::size_t, std::vector<double_t>>> results) {
+void SQLiteStorage::save_vortices(const std::size_t vortex_id, std::vector<std::tuple<double_t, std::size_t, std::vector<double_t>>> results) {
 	try {
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
@@ -256,7 +255,7 @@ void SQLiteStorage::save_vortices(const std::size_t vortex_id, std::vector<std::
 
 			save_stmt.bind("@vortex_id", static_cast<int>(vortex_id));
 			save_stmt.bind("@sweeps", static_cast<int>(sweeps));
-			save_stmt.bind("@temperature", temperature.approx());
+			save_stmt.bind("@temperature", temperature);
 			save_stmt.bind("@spins", data.data(), static_cast<int>(data.size()));
 
 			save_stmt.exec();
@@ -271,7 +270,7 @@ void SQLiteStorage::save_vortices(const std::size_t vortex_id, std::vector<std::
 }
 
 constexpr std::string_view NextChunkQuery = R"~~~~~~(
-SELECT c.configuration_id, IfNull(k.num_chunks, 0) + 1, m.algorithm, c.lattice_size, c.temperature_numerator, c.temperature_denominator, m.sweeps_per_chunk, k.spins
+SELECT c.configuration_id, IfNull(k.num_chunks, 0) + 1, m.algorithm, c.lattice_size, c.temperature, m.sweeps_per_chunk, k.spins
 FROM simulations s
 INNER JOIN configurations c on s.simulation_id = c.simulation_id
 INNER JOIN metadata m ON c.metadata_id = m.metadata_id
@@ -318,8 +317,8 @@ std::optional<Chunk> SQLiteStorage::next_chunk(const int simulation_id) {
 			next_chunk.getColumn(1).getInt(),
 			static_cast<algorithms::Algorithm>(next_chunk.getColumn(2).getInt()),
 			static_cast<std::size_t>(next_chunk.getColumn(3).getInt()),
-			utils::ratio { next_chunk.getColumn(4).getInt(), next_chunk.getColumn(5).getInt() },
-			static_cast<std::size_t>(next_chunk.getColumn(6).getInt()),
+			next_chunk.getColumn(4).getDouble(),
+			static_cast<std::size_t>(next_chunk.getColumn(5).getInt()),
 			spins
 		});
 
@@ -483,7 +482,7 @@ void SQLiteStorage::save_estimate(const int configuration_id, const int64_t star
 }
 
 constexpr std::string_view FetchNextDerivativeQuery = R"~~~~~~(
-SELECT e.configuration_id, e.type_id, c.temperature_numerator, c.temperature_denominator, e.mean, e.std_dev, o.mean, o.std_dev
+SELECT e.configuration_id, e.type_id, c.temperature, e.mean, e.std_dev, o.mean, o.std_dev
 FROM "estimates" e
 INNER JOIN "configurations" c ON e.configuration_id = c.configuration_id AND c.simulation_id = @simulation_id AND c.active_worker_id IS NULL
 INNER JOIN "estimates" o ON e.configuration_id = o.configuration_id AND o.type_id = CASE WHEN e.type_id = 0 THEN 1 WHEN e.type_id = 2 THEN 3 ELSE 0 END
@@ -502,11 +501,11 @@ std::optional<NextDerivative> SQLiteStorage::next_derivative(const int simulatio
 		if (!next_derivative_stmt.executeStep()) return std::nullopt;
 		const auto configuration_id = next_derivative_stmt.getColumn(0).getInt();
 		const auto type = static_cast<observables::Type>(next_derivative_stmt.getColumn(1).getInt());
-		const auto temperature = utils::ratio { next_derivative_stmt.getColumn(2).getInt(), next_derivative_stmt.getColumn(3).getInt() };
-		const auto mean = next_derivative_stmt.getColumn(4).getDouble();
-		const auto std_dev = next_derivative_stmt.getColumn(5).getDouble();
-		const auto square_mean = next_derivative_stmt.getColumn(6).getDouble();
-		const auto square_std_dev = next_derivative_stmt.getColumn(7).getDouble();
+		const auto temperature = next_derivative_stmt.getColumn(2).getDouble();
+		const auto mean = next_derivative_stmt.getColumn(3).getDouble();
+		const auto std_dev = next_derivative_stmt.getColumn(4).getDouble();
+		const auto square_mean = next_derivative_stmt.getColumn(5).getDouble();
+		const auto square_std_dev = next_derivative_stmt.getColumn(6).getDouble();
 
 		SQLite::Statement worker { db, SetConfigurationActiveWorker.data() };
 		worker.bind("@configuration_id", configuration_id);

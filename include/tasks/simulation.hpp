@@ -23,7 +23,7 @@ namespace tasks {
 
 		std::tuple<std::vector<double_t>, observables::Map> execute_task(const Chunk & chunk) override {
 			XoshiroCpp::Xoshiro256Plus rng { std::random_device {}() };
-			Lattice lattice {chunk.lattice_size, chunk.temperature.inverse(), chunk.spins};
+			Lattice lattice {chunk.lattice_size, 1.0 / chunk.temperature, chunk.spins};
 
 			observables::Map results;
 			for (auto [type, values] : algorithms::simulate(lattice, rng, chunk.sweeps, chunk.algorithm)) {

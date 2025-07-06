@@ -8,7 +8,7 @@ struct NextDerivative {
 
 	const observables::Type type;
 
-	const utils::ratio temperature;
+	const double_t temperature;
 
 	const double_t mean;
 

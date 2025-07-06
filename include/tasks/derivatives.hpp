@@ -45,22 +45,22 @@ namespace tasks {
 		}
 
 	private:
-		static std::tuple<double_t, double_t> specific_heat(const utils::ratio temperature, const double_t mean, const double_t std_dev, const double_t square_mean, const double_t square_std_dev) {
-			const auto norm = temperature.inverse().square().approx();
-			const auto cv_mean = norm * square_mean - norm * mean * mean;
+		static std::tuple<double_t, double_t> specific_heat(const double_t temperature, const double_t mean, const double_t std_dev, const double_t square_mean, const double_t square_std_dev) {
+			const auto norm = 1.0 / std::pow(temperature, 2.0);
+			const auto cv_mean = norm * (square_mean - std::pow(mean, 2.0));
 			const auto cv_std_dev = std::sqrt(std::pow(square_std_dev * norm, 2.0) + std::pow(2.0 * mean * std_dev * norm, 2.0));
 			return { cv_mean, cv_std_dev };
 		}
 
-		static std::tuple<double_t, double_t> magnetic_susceptibility(const utils::ratio temperature, const double_t mean, const double_t std_dev, const double_t square_mean, const double_t square_std_dev) {
-			const auto norm = temperature.inverse().approx();
-			const auto xs_mean = norm * square_mean - norm * mean * mean;
+		static std::tuple<double_t, double_t> magnetic_susceptibility(const double_t temperature, const double_t mean, const double_t std_dev, const double_t square_mean, const double_t square_std_dev) {
+			const auto norm = 1.0 / temperature;
+			const auto xs_mean = norm * (square_mean - std::pow(mean, 2.0));
 			const auto xs_std_dev = std::sqrt(std::pow(square_std_dev * norm, 2.0) + std::pow(2.0 * mean * std_dev * norm, 2.0));
 			return { xs_mean, xs_std_dev };
 		}
 
-		static std::tuple<double_t, double_t> helicity_modulus(const utils::ratio temperature, const double_t helicity, const double_t helicity_std_dev, const double_t energy_mean, const double_t energy_std_dev) {
-			const auto norm = temperature.inverse().approx();
+		static std::tuple<double_t, double_t> helicity_modulus(const double_t temperature, const double_t helicity, const double_t helicity_std_dev, const double_t energy_mean, const double_t energy_std_dev) {
+			const auto norm = 1.0 / temperature;
 			const auto hm_mean = -energy_mean / 2.0 - norm * helicity;
 			const auto hm_std_dev = std::sqrt(std::pow(-energy_std_dev / 2.0, 2.0) + std::pow(norm * helicity_std_dev, 2.0));
 			return { hm_mean, hm_std_dev };

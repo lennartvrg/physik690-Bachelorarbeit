@@ -65,10 +65,7 @@ CREATE TABLE IF NOT EXISTS "configurations" (
 	simulation_id			INTEGER				NOT NULL,
 	metadata_id				INTEGER				NOT NULL,
 	lattice_size			INTEGER				NOT NULL CHECK (lattice_size > 0),
-
-	temperature_denominator	INTEGER				NOT NULL CHECK (temperature_denominator > 0),
-	temperature_numerator	INTEGER				NOT NULL CHECK (temperature_numerator > 0),
-	temperature				REAL				NOT NULL GENERATED ALWAYS AS (CAST(temperature_numerator AS REAL) / CAST(temperature_denominator AS REAL)),
+	temperature				REAL				NOT NULL CHECK (temperature > 0.0),
 
 	CONSTRAINT "PK.Configurations_ConfigurationId" PRIMARY KEY (configuration_id),
 	CONSTRAINT "FK.Configurations_ActiveWorkerId" FOREIGN KEY (active_worker_id) REFERENCES "workers" (worker_id),
@@ -76,7 +73,7 @@ CREATE TABLE IF NOT EXISTS "configurations" (
 	CONSTRAINT "FK.Configurations_MetadataId" FOREIGN KEY (metadata_id) REFERENCES "metadata" (metadata_id)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS "IX.Configurations_MetadataId_Algorithm_LatticeSize_Temperature" ON "configurations" (simulation_id, metadata_id, lattice_size, temperature_denominator, temperature_numerator);
+CREATE UNIQUE INDEX IF NOT EXISTS "IX.Configurations_MetadataId_Algorithm_LatticeSize_Temperature" ON "configurations" (simulation_id, metadata_id, lattice_size, temperature);
 
 CREATE INDEX IF NOT EXISTS "IX.Configurations_ActiveWorkerId" ON "configurations" (active_worker_id);
 

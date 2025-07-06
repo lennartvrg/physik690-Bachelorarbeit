@@ -13,7 +13,7 @@ public:
 
 	std::optional<std::tuple<std::size_t, std::size_t>> next_vortex(int simulation_id) override;
 
-	void save_vortices(std::size_t vortex_id, std::vector<std::tuple<utils::ratio, std::size_t, std::vector<double_t>>>) override;
+	void save_vortices(std::size_t vortex_id, std::vector<std::tuple<double_t, std::size_t, std::vector<double_t>>>) override;
 
 	std::optional<Chunk> next_chunk(int simulation_id) override;
 
