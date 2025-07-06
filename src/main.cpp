@@ -21,6 +21,7 @@ int run(std::string_view connection_string) {
         tasks::Simulation<TStorage> { config, storage }.execute();
         tasks::Bootstrap<TStorage> { config, storage }.execute();
         tasks::Derivatives<TStorage> { config, storage }.execute();
+        break;
     }
 
     return 0;
@@ -28,8 +29,8 @@ int run(std::string_view connection_string) {
 
 int main() {
     try {
-        //return run<SQLiteStorage>("output/data.db");
-        return run<PostgresStorage>("postgres://postgres:postgres@10.4.0.129:5432/Bachelor");
+        return run<SQLiteStorage>("output/data.db");
+        //return run<PostgresStorage>("postgres://postgres:postgres@10.4.0.129:5432/Bachelor");
     } catch (const std::exception & e) {
         std::cerr << e.what() << std::endl;
         return -1;

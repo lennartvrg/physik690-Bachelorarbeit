@@ -3,10 +3,112 @@
 
 #include "utils/utils.hpp"
 #include "storage/sqlite_storage.hpp"
-#include "storage/migrations.hpp"
 #include "schemas/serialize.hpp"
 
 constexpr std::string_view SQLITE_MIGRATIONS = R"~~~~~~(
+CREATE TABLE IF NOT EXISTS "simulations" (
+	simulation_id			INTEGER				NOT NULL,
+
+	bootstrap_resamples		INTEGER				NOT NULL DEFAULT (100000) CHECK (bootstrap_resamples > 0),
+	created_at				BIGINT				NOT NULL,
+
+	CONSTRAINT "PK.Simulations_SimulationId" PRIMARY KEY (simulation_id)
+);
+
+
+CREATE TABLE IF NOT EXISTS "metadata" (
+	metadata_id				INTEGER				NOT NULL,
+
+	simulation_id			INTEGER				NOT NULL,
+	algorithm				INTEGER				NOT NULL CHECK (algorithm = 0 OR algorithm = 1),
+	num_chunks				INTEGER				NOT NULL DEFAULT (10) CHECK (num_chunks > 0),
+	sweeps_per_chunk		INTEGER				NOT NULL DEFAULT (100000) CHECK (sweeps_per_chunk > 0),
+
+	CONSTRAINT "PK.Metadata_SimulationId" PRIMARY KEY (metadata_id),
+	CONSTRAINT "FK.Metadata_SimulationId" FOREIGN KEY (simulation_id) REFERENCES "simulations" (simulation_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "IX.Metadata_SimulationId_Algorithm" ON "metadata" (simulation_id, algorithm);
+
+
+CREATE TABLE IF NOT EXISTS "workers" (
+	worker_id				INTEGER				NOT NULL,
+
+	name					TEXT				NOT NULL CHECK (length(name) > 0),
+	last_active_at			BIGINT				NOT NULL,
+
+	CONSTRAINT "PK.Workers_WorkerId" PRIMARY KEY (worker_id)
+);
+
+CREATE INDEX IF NOT EXISTS "IX.Workers_LastActiveAt" ON "workers" (last_active_at);
+
+
+CREATE TABLE IF NOT EXISTS "configurations" (
+	configuration_id		INTEGER				NOT NULL,
+
+	active_worker_id		INTEGER					NULL,
+	simulation_id			INTEGER				NOT NULL,
+	metadata_id				INTEGER				NOT NULL,
+	lattice_size			INTEGER				NOT NULL CHECK (lattice_size > 0),
+	temperature				REAL				NOT NULL CHECK (temperature > 0.0),
+
+	CONSTRAINT "PK.Configurations_ConfigurationId" PRIMARY KEY (configuration_id),
+	CONSTRAINT "FK.Configurations_ActiveWorkerId" FOREIGN KEY (active_worker_id) REFERENCES "workers" (worker_id),
+	CONSTRAINT "FK.Configurations_SimulationId"	FOREIGN KEY (simulation_id) REFERENCES "simulations" (simulation_id),
+	CONSTRAINT "FK.Configurations_MetadataId" FOREIGN KEY (metadata_id) REFERENCES "metadata" (metadata_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "IX.Configurations_MetadataId_Algorithm_LatticeSize_Temperature" ON "configurations" (simulation_id, metadata_id, lattice_size, temperature);
+
+CREATE INDEX IF NOT EXISTS "IX.Configurations_ActiveWorkerId" ON "configurations" (active_worker_id);
+
+
+CREATE TABLE IF NOT EXISTS "types" (
+	type_id					INTEGER				NOT NULL,
+
+	name					TEXT				NOT NULL,
+
+	CONSTRAINT "PK.Types_TypeId" PRIMARY KEY (type_id)
+);
+
+INSERT INTO "types" (type_id, name) VALUES (0, 'Energy'), (1, 'Energy Squared'), (2, 'Magnetization'), (3, 'Magnetization Squared'), (4, 'Specific Heat'), (5, 'Magnetic Susceptibility'), (6, 'Helicity Modulus Intermediate'), (7, 'Helicity Modulus'), (8, 'Cluster size')
+ON CONFLICT DO NOTHING;
+
+
+CREATE TABLE IF NOT EXISTS "estimates" (
+	configuration_id		INTEGER				NOT NULL,
+	type_id					INTEGER				NOT NULL,
+
+	start_time				INTEGER				NOT NULL,
+	end_time				INTEGER				NOT NULL CHECK (end_time >= start_time),
+	time					INTEGER				GENERATED ALWAYS AS (end_time - start_time) STORED,
+
+	mean					REAL				NOT NULL,
+	std_dev					REAL				NOT NULL,
+
+	CONSTRAINT "PK.Estimates_ConfigurationId_TypeId" PRIMARY KEY (configuration_id, type_id),
+	CONSTRAINT "FK.Estimates_ConfigurationId" FOREIGN KEY (configuration_id) REFERENCES "configurations" (configuration_id),
+	CONSTRAINT "FK.Estimates_TypeId" FOREIGN KEY (type_id) REFERENCES "types" (type_id)
+);
+
+
+CREATE TABLE IF NOT EXISTS "vortices" (
+	vortex_id				INTEGER				NOT NULL,
+
+	simulation_id			INTEGER				NOT NULL,
+	lattice_size			INTEGER				NOT NULL CHECK (lattice_size > 0),
+
+	worker_id				INTEGER					NULL,
+
+	CONSTRAINT "PK.Vortices_VortexId" PRIMARY KEY (vortex_id),
+	CONSTRAINT "FK.Vortices_ActiveWorkerId" FOREIGN KEY (worker_id) REFERENCES "workers" (worker_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "IX.Vortices_SimulationId_LatticeSize" ON "vortices" (simulation_id, lattice_size);
+
+CREATE INDEX IF NOT EXISTS "IX.Vortices_ActiveWorkerId" ON "vortices" (worker_id);
+
+
 CREATE TABLE IF NOT EXISTS "vortex_results" (
 	vortex_id				INTEGER				NOT NULL,
 	sweeps					INTEGER				NOT NULL,
@@ -90,6 +192,10 @@ BEGIN
 END;
 )~~~~~~";
 
+constexpr std::string_view RegisterWorkerQuery = R"~~~~~~(
+INSERT INTO "workers" (name, last_active_at) VALUES (@name, @last_active_at) RETURNING "worker_id"
+)~~~~~~";
+
 SQLiteStorage::SQLiteStorage(const std::string_view & path) : worker_id(-1), db(path, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE | SQLite::OPEN_NOMUTEX) {
 	try {
 		db.setBusyTimeout(10000);
@@ -97,7 +203,6 @@ SQLiteStorage::SQLiteStorage(const std::string_view & path) : worker_id(-1), db(
 		db.exec("PRAGMA synchronous = NORMAL");
 
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
-		db.exec(MIGRATIONS.data());
 		db.exec(SQLITE_MIGRATIONS.data());
 
 		SQLite::Statement worker { db, RegisterWorkerQuery.data() };
@@ -304,7 +409,7 @@ std::optional<Chunk> SQLiteStorage::next_chunk(const int simulation_id) {
 
 		std::optional<std::vector<double_t>> spins = std::nullopt;
 		if (!next_chunk.getColumn(6).isNull()) {
-			const auto buffer = next_chunk.getColumn(7).getBlob();
+			const auto buffer = next_chunk.getColumn(6).getBlob();
 			spins = schemas::deserialize(buffer);
 		}
 
