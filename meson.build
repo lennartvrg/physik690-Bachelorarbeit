@@ -45,7 +45,7 @@ exe = executable(
   'src/storage/postgres_storage.cpp',
   'src/main.cpp',
   cpp_args: ['-march=native', '-ffast-math'],
-  link_args: ['-march=native'],
+  link_args: ['-march=native', '-lpqxx', '-lpq'],
   include_directories: incdir,
   install : true,
   dependencies : dependencies,

@@ -581,7 +581,7 @@ UPDATE "workers" SET "last_active_at" = unixepoch() WHERE "worker_id" = $1;
 void PostgresStorage::worker_keep_alive() {
 	try {
 		pqxx::work transaction { db };
-		transaction.exec(UpdateWorkerLastActive.data(), { worker_id });
+		transaction.exec(UpdateWorkerLastActive.data(), pqxx::params { worker_id });
 		transaction.commit();
 	} catch (std::exception & e) {
 		std::cout << "[PostgreSQL] Failed to send worker keep alive. PostgreSQL exception: " << e.what() << std::endl;
