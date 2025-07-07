@@ -1,7 +1,7 @@
 #include <cassert>
 
 #include <simde/x86/svml.h>
-#include <simde/x86/avx.h>
+#include <simde/x86/avx2.h>
 #include <simde/x86/sse2.h>
 
 #include "lattice.hpp"

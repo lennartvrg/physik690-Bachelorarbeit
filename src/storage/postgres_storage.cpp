@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "storage/postgres_storage.hpp"
+#include "schemas/serialize.hpp"
 
 constexpr std::string_view POSTGRES_MIGRATIONS = R"~~~~~~(
 CREATE TABLE IF NOT EXISTS "simulations" (
@@ -221,35 +222,369 @@ PostgresStorage::PostgresStorage(const std::string_view & connection_string) : w
 	}
 }
 
-bool PostgresStorage::prepare_simulation(Config config) {
-	return true;
+constexpr std::string_view InsertSimulationQuery = R"~~~~~~(
+INSERT INTO "simulations" (simulation_id, bootstrap_resamples, created_at) VALUES ($1, $2, $3)
+ON CONFLICT DO UPDATE SET bootstrap_resamples = $2
+)~~~~~~";
+
+constexpr std::string_view InsertVorticesQuery = R"~~~~~~(
+INSERT INTO "vortices" (simulation_id, lattice_size) VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+)~~~~~~";
+
+constexpr std::string_view InsertMetadataQuery = R"~~~~~~(
+INSERT INTO "metadata" (simulation_id, algorithm, num_chunks, sweeps_per_chunk) VALUES ($1, $2, $3, $4)
+ON CONFLICT DO UPDATE SET num_chunks = $3 WHERE num_chunks < $3
+)~~~~~~";
+
+constexpr std::string_view FetchMetadataQuery = R"~~~~~~(
+SELECT metadata_id FROM "metadata" WHERE simulation_id = $1 AND algorithm = $2
+)~~~~~~";
+
+constexpr std::string_view InsertConfigurationsQuery = R"~~~~~~(
+INSERT INTO "configurations" (simulation_id, metadata_id, lattice_size, temperature) VALUES ($1, $2, $3, $4)
+ON CONFLICT DO NOTHING
+)~~~~~~";
+
+bool PostgresStorage::prepare_simulation(const Config config) {
+	try {
+		pqxx::work transaction { db };
+
+		transaction.exec(InsertSimulationQuery.data(), {
+			config.simulation_id,
+			config.bootstrap_resamples,
+			utils::timestamp_ms()
+		});
+
+		db.prepare("vortex", InsertVorticesQuery.data());
+		for (const auto size : config.vortex_sizes) {
+			transaction.exec(pqxx::prepped { "vortex" }, { config.simulation_id, size });
+		}
+
+		db.prepare("insert_metadata", InsertMetadataQuery.data());
+		db.prepare("fetch_metadata", FetchMetadataQuery.data());
+		db.prepare("insert_configurations", InsertConfigurationsQuery.data());
+
+		for (const auto & [key, value] : config.algorithms) {
+			transaction.exec(pqxx::prepped { "insert_metadata" }, {
+				config.simulation_id, static_cast<int>(key), value.num_chunks, value.sweeps_per_chunk,
+			});
+
+
+			const auto [metadata_id] = transaction.query1<int>(pqxx::prepped { "insert_metadata" }, {
+				config.simulation_id, static_cast<int>(key)
+			});
+
+			for (const auto size : value.sizes) {
+				for (const auto temperature : utils::sweep_temperature(0.0, config.max_temperature, config.temperature_steps)) {
+					transaction.exec(pqxx::prepped { "insert_configurations" }, {
+						config.simulation_id, metadata_id, size, temperature
+					});
+				}
+			}
+		}
+
+		db.unprepare("vortex");
+		db.unprepare("insert_metadata");
+		db.unprepare("fetch_metadata");
+		db.unprepare("insert_configurations");
+
+		transaction.commit();
+		return true;
+	} catch (std::exception & e) {
+		std::cout << "[PostgreSQL] Failed to prepare simulation. PostgreSQL exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
 }
 
-std::optional<std::tuple<std::size_t, std::size_t>> PostgresStorage::next_vortex(int simulation_id) {
-	return std::nullopt;
+constexpr std::string_view NextVortexQuery = R"~~~~~~(
+SELECT v."vortex_id", v."lattice_size" FROM "vortices" v WHERE v."simulation_id" = $1 AND NOT EXISTS (
+	SELECT * FROM "vortex_results" vr WHERE vr.vortex_id = v.vortex_id
+) AND (
+	v."worker_id" IS NULL OR v."worker_id" IN (SELECT w."worker_id" FROM "workers" w WHERE w."last_active_at" < unixepoch('now', '-5 minutes'))
+);
+)~~~~~~";
+
+constexpr std::string_view SetVortexActiveWorkerId = R"~~~~~~(
+UPDATE "vortices" SET "worker_id" = $1 WHERE "vortex_id" = $2;
+)~~~~~~";
+
+std::optional<std::tuple<std::size_t, std::size_t>> PostgresStorage::next_vortex(const int simulation_id) {
+	try {
+		pqxx::work transaction { db };
+
+		const auto pair = transaction.query01<int, int>(NextVortexQuery.data(), { simulation_id });
+		if (!pair.has_value()) {
+			return std::nullopt;
+		}
+		const auto [vortex_id, lattice_size] = *pair;
+
+		if (transaction.exec(SetVortexActiveWorkerId.data(), { vortex_id, worker_id }).affected_rows() != 1) {
+			return std::nullopt;
+		}
+		transaction.commit();
+
+		return {{ static_cast<std::size_t>(vortex_id), static_cast<std::size_t>(lattice_size) }};
+	} catch (std::exception & e) {
+		std::cout << "[PostgreSQL] Failed to fetch next vortex. PostgreSQL exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
 }
 
-void PostgresStorage::save_vortices(std::size_t vortex_id, std::vector<std::tuple<double_t, std::size_t, std::vector<double_t>>>) {
+constexpr std::string_view InsertVortexResultsQuery = R"~~~~~~(
+INSERT INTO "vortex_results" (vortex_id, sweeps, temperature, spins) VALUES ($1, $2, $3, $4)
+)~~~~~~";
+
+void PostgresStorage::save_vortices(const std::size_t vortex_id, std::vector<std::tuple<double_t, std::size_t, std::vector<double_t>>> results) {
+	try {
+		pqxx::work transaction { db };
+
+		db.prepare("insert_vortex", InsertVortexResultsQuery.data());
+		for (const auto & [temperature, sweeps, spins] : results) {
+			const auto data = schemas::serialize(spins);
+
+			transaction.exec(pqxx::prepped { "insert_vortex" }, {
+				vortex_id, sweeps, temperature, pqxx::binary_cast(data.data(), data.size())
+			});
+		}
+
+		transaction.commit();
+	} catch (std::exception & e) {
+		std::cout << "[PostgreSQL] Failed to fetch save vortex results. PostgreSQL exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
 }
 
-std::optional<Chunk> PostgresStorage::next_chunk(int simulation_id) {
-	return std::nullopt;
+constexpr std::string_view NextChunkQuery = R"~~~~~~(
+SELECT c.configuration_id, IfNull(k.num_chunks, 0) + 1, m.algorithm, c.lattice_size, c.temperature, m.sweeps_per_chunk, k.spins
+FROM simulations s
+INNER JOIN configurations c on s.simulation_id = c.simulation_id
+INNER JOIN metadata m ON c.metadata_id = m.metadata_id
+LEFT JOIN (
+    SELECT k.configuration_id, k.spins, MAX(k."index") AS num_chunks
+    FROM chunks k
+	GROUP BY k.configuration_id
+) k ON c.configuration_id = k.configuration_id
+WHERE s.simulation_id = $1 AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
+	SELECT "worker_id" FROM "workers" WHERE "last_active_at" < unixepoch('now', '-5 minutes')
+)) AND IfNull(k.num_chunks, 0) < m.num_chunks
+ORDER BY IfNull(k.num_chunks, 0) ASC LIMIT 1;
+)~~~~~~";
+
+constexpr std::string_view SetConfigurationActiveWorker = R"~~~~~~(
+UPDATE "configurations" SET "active_worker_id" = $1 WHERE "configuration_id" = $2;
+)~~~~~~";
+
+std::optional<Chunk> PostgresStorage::next_chunk(const int simulation_id) {
+	try {
+		pqxx::work transaction { db };
+
+		const auto configuration_id_opt = transaction.query01<int, int, int, int, double_t, int, std::basic_string<std::byte>>(NextChunkQuery.data(), { simulation_id });
+		if (!configuration_id_opt.has_value()) {
+			return std::nullopt;
+		}
+		const auto [configuration_id, index, algorithm, lattice_size, temperature, sweeps_per_chunk, spins_opt] = *configuration_id_opt;
+
+
+		if (transaction.exec(SetConfigurationActiveWorker.data(), { configuration_id, worker_id }).affected_rows() != 1) {
+			return std::nullopt;
+		}
+		transaction.commit();
+
+		std::optional<std::vector<double_t>> spins = std::nullopt;
+		if constexpr (!pqxx::nullness<std::basic_string<std::byte>>::is_null(spins_opt)) {
+			spins = schemas::deserialize(spins_opt.data());
+		}
+
+		return std::optional<Chunk>({
+			configuration_id,
+			index,
+			static_cast<algorithms::Algorithm>(algorithm),
+			static_cast<std::size_t>(lattice_size),
+			temperature,
+			static_cast<std::size_t>(sweeps_per_chunk),
+			spins
+		});
+
+	} catch (std::exception & e) {
+		std::cout << "[PostgreSQL] Failed to fetch next chunk. PostgreSQL exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
 }
 
-void PostgresStorage::save_chunk(const Chunk &chunk, int64_t start_time, int64_t end_time, const std::span<const uint8_t> &spins, const std::map<observables::Type, std::tuple<double_t, std::vector<uint8_t>, std::optional<std::vector<uint8_t>>>> & results) {
+constexpr std::string_view InsertChunkQuery = R"~~~~~~(
+INSERT INTO "chunks" (configuration_id, "index", start_time, end_time, worker_id, spins) VALUES ($1, $2, $3, $4, $5, $6) RETURNING chunk_id
+)~~~~~~";
+
+constexpr std::string_view InsertAutocorrelationQuery = R"~~~~~~(
+INSERT INTO "autocorrelations" (configuration_id, type_id, chunk_id, data) VALUES ($1, $2, $3, $4)
+)~~~~~~";
+
+constexpr std::string_view InsertResultQuery = R"~~~~~~(
+INSERT INTO "results" (chunk_id, type_id, tau, data) VALUES ($1, $2, $3, $4)
+)~~~~~~";
+
+constexpr std::string_view RemoveWorkerQuery = R"~~~~~~(
+UPDATE "configurations" SET active_worker_id = NULL WHERE "configuration_id" = $1 AND "active_worker_id" = $2
+)~~~~~~";
+
+void PostgresStorage::save_chunk(const Chunk & chunk, const int64_t start_time, const int64_t end_time, const std::span<const uint8_t> & spins, const std::map<observables::Type, std::tuple<double_t, std::vector<uint8_t>, std::optional<std::vector<uint8_t>>>> & results) {
+	try {
+		pqxx::work transaction { db };
+
+		const auto [chunk_id] = transaction.query1<int>(InsertChunkQuery.data(), {
+			chunk.configuration_id, chunk.index, start_time, end_time, worker_id, pqxx::binary_cast(spins.data(), spins.size())
+		});
+
+		db.prepare("result", InsertResultQuery.data());
+		db.prepare("autocorrelation", InsertAutocorrelationQuery.data());
+
+		for (const auto & [key, value] : results) {
+			const auto [tau, values, autocorrelation_opt] = value;
+			transaction.exec(pqxx::prepped { "result" }, { chunk_id, static_cast<int>(key), tau, pqxx::binary_cast(values.data(), values.size()) });
+
+			if (const auto autocorrelation = autocorrelation_opt) {
+				transaction.exec(pqxx::prepped { "autocorrelation" }, {
+					chunk.configuration_id, static_cast<int>(key), chunk_id, pqxx::binary_cast(autocorrelation->data(), autocorrelation->size())
+				});
+			}
+		}
+
+		transaction.exec(RemoveWorkerQuery.data(), { chunk.configuration_id, worker_id });
+		transaction.commit();
+
+		db.unprepare("result");
+		db.unprepare("autocorrelation");
+	} catch (std::exception & e) {
+		std::cout << "[PostgreSQL] Failed to save chunk. PostgreSQL exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
 }
 
-std::optional<std::tuple<Estimate, std::vector<double_t>>> PostgresStorage::next_estimate(int simulation_id) {
-	return std::nullopt;
+constexpr std::string_view FetchNextEstimateQuery = R"~~~~~~(
+SELECT c.configuration_id, s.bootstrap_resamples, m.num_chunks, t.type_id
+FROM "simulations" s
+INNER JOIN "configurations" c ON c.simulation_id = s.simulation_id
+INNER JOIN "metadata" m ON c.metadata_id = m.metadata_id
+INNER JOIN "chunks" ch ON c.configuration_id = ch.configuration_id AND ch."index" = m.num_chunks
+CROSS JOIN "types" t ON t.type_id BETWEEN 0 AND 3 OR t.type_id = 6 OR (t.type_id = 8 AND m.algorithm = 1)
+LEFT JOIN "estimates" e ON e.configuration_id = c.configuration_id AND e.type_id = t.type_id
+WHERE s.simulation_id = $1 AND c.active_worker_id IS NULL AND e.type_id IS NULL
+LIMIT 1
+)~~~~~~";
+
+constexpr std::string_view FetchConfigurationResults = R"~~~~~~(
+SELECT c."index", r.data
+FROM "chunks" c
+INNER JOIN "results" r ON c.chunk_id = r.chunk_id AND r.type_id = $2
+WHERE c.configuration_id = $1
+ORDER BY c."index"
+)~~~~~~";
+
+std::optional<std::tuple<Estimate, std::vector<double_t>>> PostgresStorage::next_estimate(const int simulation_id) {
+	try {
+		pqxx::work transaction { db };
+
+		const auto estimate_opt = transaction.query01<int, std::size_t, int, int>(FetchNextEstimateQuery.data(), {
+			simulation_id
+		});
+
+		if (!estimate_opt.has_value()) {
+			return std::nullopt;
+		}
+		const auto [configuration_id, bootstrap_resamples, num_chunks, type] = *estimate_opt;
+
+
+		if (transaction.exec(SetConfigurationActiveWorker.data(), { configuration_id, worker_id }).affected_rows() != 1) {
+			return std::nullopt;
+		}
+
+		std::vector<double_t> values {};
+		for (const auto & [index, buffer] : transaction.query<int, std::basic_string<std::byte>>(FetchConfigurationResults.data(), { configuration_id, type })) {
+			const auto data = schemas::deserialize(buffer.data());
+
+			values.reserve(data.size() * num_chunks);
+			values.insert(values.end(), data.begin(), data.end());
+		}
+
+		transaction.commit();
+
+		return { std::make_tuple<Estimate, std::vector<double_t>>({ configuration_id, static_cast<observables::Type>(type), bootstrap_resamples }, std::move(values)) };
+	} catch (std::exception & e) {
+		std::cout << "[PostgreSQL] Failed to fetch next estimate. PostgreSQL exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
 }
 
-std::optional<NextDerivative> PostgresStorage::next_derivative(int simulation_id) {
-	return std::nullopt;
+constexpr std::string_view InsertEstimateQuery = R"~~~~~~(
+INSERT INTO "estimates" (configuration_id, type_id, start_time, end_time, mean, std_dev) VALUES ($1, $2, $3, $4, $5, $6)
+)~~~~~~";
 
+void PostgresStorage::save_estimate(const int configuration_id, const int64_t start_time, const int64_t end_time, const observables::Type type, const double_t mean, const double_t std_dev) {
+	try {
+		pqxx::work transaction { db };
+
+		transaction.exec(InsertEstimateQuery.data(), {
+			configuration_id, static_cast<int>(type), start_time, end_time, mean, std_dev
+		});
+
+		transaction.exec(RemoveWorkerQuery.data(), {
+			configuration_id, worker_id, worker_id,
+		});
+
+		transaction.commit();
+	} catch (const std::exception & e) {
+		std::cout << "[PostgreSQL] Failed to save estimate. PostgreSQL exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
 }
 
-void PostgresStorage::save_estimate(int configuration_id, int64_t start_time, int64_t end_time, observables::Type type, double_t mean, double_t std_dev) {
+constexpr std::string_view FetchNextDerivativeQuery = R"~~~~~~(
+SELECT e.configuration_id, e.type_id, c.temperature, e.mean, e.std_dev, o.mean, o.std_dev
+FROM "estimates" e
+INNER JOIN "configurations" c ON e.configuration_id = c.configuration_id AND c.simulation_id = $1 AND c.active_worker_id IS NULL
+INNER JOIN "estimates" o ON e.configuration_id = o.configuration_id AND o.type_id = CASE WHEN e.type_id = 0 THEN 1 WHEN e.type_id = 2 THEN 3 ELSE 0 END
+LEFT JOIN "estimates" t ON e.configuration_id = t.configuration_id AND t.type_id = CASE WHEN e.type_id = 0 THEN 4 WHEN e.type_id = 2 THEN 5 ELSE 7 END
+WHERE (e.type_id = 0 OR e.type_id = 2 OR e.type_id = 6) AND (t.configuration_id IS NULL)
+LIMIT 1
+)~~~~~~";
+
+std::optional<NextDerivative> PostgresStorage::next_derivative(const int simulation_id) {
+	try {
+		pqxx::work transaction { db };
+
+		const auto derivative_opt = transaction.query01<int, int, double_t, double_t, double_t, double_t, double_t>(FetchNextDerivativeQuery.data(), {
+			simulation_id
+		});
+
+		if (!derivative_opt.has_value()) {
+			return std::nullopt;
+		}
+
+		const auto [ configuration_id, type, temperature, mean, std_dev, square_mean, square_std_dev ] = derivative_opt.value();
+		if (transaction.exec(SetConfigurationActiveWorker.data(), { configuration_id, worker_id }).affected_rows() != 1) {
+			return std::nullopt;
+		}
+
+		transaction.commit();
+		return { { configuration_id, static_cast<observables::Type>(type), temperature, mean, std_dev, square_mean, square_std_dev } };
+	} catch (const std::exception & e) {
+		std::cout << "[PostgreSQL] Failed to fetch next derivative. PostgreSQL exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
 }
+
+constexpr std::string_view UpdateWorkerLastActive = R"~~~~~~(
+UPDATE "workers" SET "last_active_at" = unixepoch() WHERE "worker_id" = $1;
+)~~~~~~";
 
 void PostgresStorage::worker_keep_alive() {
+	try {
+		pqxx::work transaction { db };
+		transaction.exec(UpdateWorkerLastActive.data(), { worker_id });
+		transaction.commit();
+	} catch (std::exception & e) {
+		std::cout << "[PostgreSQL] Failed to send worker keep alive. PostgreSQL exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
 }
