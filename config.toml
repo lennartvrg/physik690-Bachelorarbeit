@@ -1,25 +1,25 @@
 [simulation]
-identifier = 1
-bootstrap_resamples = 80000
+identifier = 2
+bootstrap_resamples = 10000
 
 [temperature]
-max = 2.0
-steps = 64
-max_zoom = 3
+max = 3.0
+steps = 32
+max_depth = 2
 
 [vortices]
 sizes = [ ]
 
 [metropolis]
 num_chunks = 5
-sweeps_per_chunk = 80000
+sweeps_per_chunk = 100000
 sizes = [
-    4, 8, 16, 32, 64, 96, 128, 160, 192
+    4, 8, 16, 24, 32
 ]
 
 [wolff]
 num_chunks = 5
-sweeps_per_chunk = 40000
+sweeps_per_chunk = 60000
 sizes = [
-    4, 8, 16, 32, 64, 96, 128, 160, 192
+    4, 8, 16, 24, 32
 ]

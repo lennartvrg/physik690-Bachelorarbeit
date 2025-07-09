@@ -1,6 +1,10 @@
 #include <iostream>
 
 #include "storage/postgres_storage.hpp"
+
+#include <mutex>
+#include <thread>
+
 #include "schemas/serialize.hpp"
 
 constexpr std::string_view POSTGRES_MIGRATIONS = R"~~~~~~(
@@ -50,6 +54,8 @@ CREATE TABLE IF NOT EXISTS "configurations" (
 	lattice_size			INTEGER				NOT NULL CHECK (lattice_size > 0),
 	temperature				REAL				NOT NULL CHECK (temperature > 0.0),
 
+	depth					INTEGER				NOT NULL,
+
 	CONSTRAINT "PK.Configurations_ConfigurationId" PRIMARY KEY (configuration_id),
 	CONSTRAINT "FK.Configurations_ActiveWorkerId" FOREIGN KEY (active_worker_id) REFERENCES "workers" (worker_id),
 	CONSTRAINT "FK.Configurations_SimulationId"	FOREIGN KEY (simulation_id) REFERENCES "simulations" (simulation_id),
@@ -70,16 +76,16 @@ CREATE TABLE IF NOT EXISTS "types" (
 );
 
 INSERT INTO "types" (type_id, name) VALUES (0, 'Energy'), (1, 'Energy Squared'), (2, 'Magnetization'), (3, 'Magnetization Squared'), (4, 'Specific Heat'), (5, 'Magnetic Susceptibility'), (6, 'Helicity Modulus Intermediate'), (7, 'Helicity Modulus'), (8, 'Cluster size')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (type_id) DO NOTHING;
 
 
 CREATE TABLE IF NOT EXISTS "estimates" (
 	configuration_id		INTEGER				NOT NULL,
 	type_id					INTEGER				NOT NULL,
 
-	start_time				INTEGER				NOT NULL,
-	end_time				INTEGER				NOT NULL CHECK (end_time >= start_time),
-	time					INTEGER				GENERATED ALWAYS AS (end_time - start_time) STORED,
+	start_time				BIGINT				NOT NULL,
+	end_time				BIGINT				NOT NULL CHECK (end_time >= start_time),
+	time					BIGINT				GENERATED ALWAYS AS (end_time - start_time) STORED,
 
 	mean					REAL				NOT NULL,
 	std_dev					REAL				NOT NULL,
@@ -137,16 +143,16 @@ AFTER INSERT ON "workers" FOR EACH ROW
 EXECUTE FUNCTION "FNC.RemoveInactiveWorkers"();
 
 CREATE TABLE IF NOT EXISTS "chunks" (
-	chunk_id				INTEGER				NOT NULL,
+	chunk_id				INTEGER				NOT NULL GENERATED ALWAYS AS IDENTITY,
 
 	configuration_id		INTEGER				NOT NULL,
 	"index"					INTEGER				NOT NULL,
 
 	worker_id				INTEGER				NOT NULL,
 
-	start_time				INTEGER				NOT NULL,
-	end_time				INTEGER				NOT NULL CHECK (end_time >= start_time),
-	time					INTEGER				GENERATED ALWAYS AS (end_time - start_time) STORED,
+	start_time				BIGINT				NOT NULL,
+	end_time				BIGINT				NOT NULL CHECK (end_time >= start_time),
+	time					BIGINT				GENERATED ALWAYS AS (end_time - start_time) STORED,
 
 	spins					BYTEA				NOT NULL,
 
@@ -189,8 +195,8 @@ CREATE TABLE IF NOT EXISTS "results" (
 CREATE OR REPLACE FUNCTION "FNC.RemoveOutdatedEstimates"() RETURNS TRIGGER AS
 $BODY$
 BEGIN
-	DELETE FROM "estimates" WHERE type_id = NEW.type_id AND EXISTS (
-		SELECT * FROM "chunks" c WHERE c.chunk_id = NEW.chunk_id AND configuration_id = c.configuration_id
+	DELETE FROM "estimates" WHERE configuration_id IN (
+		SELECT configuration_id FROM "chunks" c WHERE c.chunk_id = NEW.chunk_id
 	);
 	RETURN NEW;
 END;
@@ -224,17 +230,17 @@ PostgresStorage::PostgresStorage(const std::string_view & connection_string) : w
 
 constexpr std::string_view InsertSimulationQuery = R"~~~~~~(
 INSERT INTO "simulations" (simulation_id, bootstrap_resamples, created_at) VALUES ($1, $2, $3)
-ON CONFLICT DO UPDATE SET bootstrap_resamples = $2
+ON CONFLICT (simulation_id) DO UPDATE SET bootstrap_resamples = $2
 )~~~~~~";
 
 constexpr std::string_view InsertVorticesQuery = R"~~~~~~(
 INSERT INTO "vortices" (simulation_id, lattice_size) VALUES ($1, $2)
-ON CONFLICT DO NOTHING
+ON CONFLICT (simulation_id, lattice_size) DO NOTHING
 )~~~~~~";
 
 constexpr std::string_view InsertMetadataQuery = R"~~~~~~(
 INSERT INTO "metadata" (simulation_id, algorithm, num_chunks, sweeps_per_chunk) VALUES ($1, $2, $3, $4)
-ON CONFLICT DO UPDATE SET num_chunks = $3 WHERE num_chunks < $3
+ON CONFLICT (simulation_id, algorithm) DO UPDATE SET num_chunks = $3 WHERE "metadata".num_chunks < $3
 )~~~~~~";
 
 constexpr std::string_view FetchMetadataQuery = R"~~~~~~(
@@ -242,8 +248,42 @@ SELECT metadata_id FROM "metadata" WHERE simulation_id = $1 AND algorithm = $2
 )~~~~~~";
 
 constexpr std::string_view InsertConfigurationsQuery = R"~~~~~~(
-INSERT INTO "configurations" (simulation_id, metadata_id, lattice_size, temperature) VALUES ($1, $2, $3, $4)
-ON CONFLICT DO NOTHING
+INSERT INTO "configurations" (simulation_id, metadata_id, lattice_size, temperature, depth) VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (simulation_id, metadata_id, lattice_size, temperature) DO NOTHING
+)~~~~~~";
+
+constexpr std::string_view FetchAllWorkDoneQuery = R"~~~~~~(
+SELECT COUNT(*) AS count
+FROM configurations c
+    INNER JOIN metadata m ON c.metadata_id = m.metadata_id
+    LEFT JOIN (
+        SELECT c.configuration_id, COUNT(*) AS "done_chunks"
+        FROM configurations c INNER JOIN chunks c2 on c.configuration_id = c2.configuration_id
+        WHERE c.simulation_id = $1
+        GROUP BY c.configuration_id
+    ) c2 ON c.configuration_id = c2.configuration_id
+    LEFT JOIN (
+        SELECT c.configuration_id, COUNT(*) AS "done_estimates"
+        FROM configurations c INNER JOIN estimates e ON c.configuration_id = e.configuration_id
+        WHERE c.simulation_id = $1
+        GROUP BY c.configuration_id
+    ) e ON c.configuration_id = e.configuration_id
+WHERE c.simulation_id = $1 AND (c2.configuration_id IS NULL OR e.configuration_id IS NULL OR c2.done_chunks < m.num_chunks OR e.done_estimates != CASE WHEN m.algorithm = 0 THEN 8 ELSE 9 END);
+)~~~~~~";
+
+constexpr std::string_view FetchMaxDepthQuery = R"~~~~~~(
+SELECT MAX(c.depth) AS max_depth
+FROM configurations c
+WHERE c.simulation_id = $1 AND c.metadata_id = $2 AND c.lattice_size = $3;
+)~~~~~~";
+
+constexpr std::string_view FetchPeakMagneticSusceptibilityQuery = R"~~~~~~(
+SELECT c.temperature, (c.temperature - LAG(c.temperature, 1) OVER (ORDER BY c.temperature)) AS diff
+FROM configurations c
+         INNER JOIN estimates e ON c.configuration_id = e.configuration_id AND e.type_id = 5
+WHERE c.simulation_id = $1 AND c.metadata_id = $2 AND c.lattice_size = $3
+ORDER BY e.mean DESC
+LIMIT 1;
 )~~~~~~";
 
 bool PostgresStorage::prepare_simulation(const Config config) {
@@ -262,7 +302,6 @@ bool PostgresStorage::prepare_simulation(const Config config) {
 		}
 
 		db.prepare("insert_metadata", InsertMetadataQuery.data());
-		db.prepare("fetch_metadata", FetchMetadataQuery.data());
 		db.prepare("insert_configurations", InsertConfigurationsQuery.data());
 
 		for (const auto & [key, value] : config.algorithms) {
@@ -270,27 +309,60 @@ bool PostgresStorage::prepare_simulation(const Config config) {
 				config.simulation_id, static_cast<int>(key), value.num_chunks, value.sweeps_per_chunk,
 			});
 
-
-			const auto [metadata_id] = transaction.query1<int>(pqxx::prepped { "insert_metadata" }, {
+			const auto [metadata_id] = transaction.query1<int>(FetchMetadataQuery.data(), {
 				config.simulation_id, static_cast<int>(key)
 			});
 
 			for (const auto size : value.sizes) {
 				for (const auto temperature : utils::sweep_temperature(0.0, config.max_temperature, config.temperature_steps)) {
 					transaction.exec(pqxx::prepped { "insert_configurations" }, {
-						config.simulation_id, metadata_id, size, temperature
+						config.simulation_id, metadata_id, size, temperature, 1
 					});
+				}
+			}
+		}
+
+		// Check if all registered configurations are completely done
+		if (get<0>(transaction.query1<int>(FetchAllWorkDoneQuery.data(), { config.simulation_id })) == 0) {
+			for (const auto & [key, value] : config.algorithms) {
+				// Find metadata row associated with algorithm
+				const auto [metadata_id] = transaction.query1<int>(FetchMetadataQuery.data(), {
+					config.simulation_id, static_cast<int>(key)
+				});
+
+				// Iterate over sizes
+				for (const auto size : value.sizes) {
+					// Check depth not yet reached
+					if (const auto [depth] = transaction.query1<int>(FetchMaxDepthQuery.data(), { config.simulation_id, metadata_id, size }); depth < config.max_depth) {
+						// Fetch the Xs peak by the temperature where it occurred and the space to neighboring data points
+						const auto pair = transaction.query01<double_t, double_t>(FetchPeakMagneticSusceptibilityQuery.data(), {
+							config.simulation_id, metadata_id, static_cast<int>(size)
+						});
+
+						if (pair.has_value()) {
+							const auto [max_temperature, diff] = *pair;
+
+							// Add configurations
+							for (const auto temperature : utils::sweep_temperature(max_temperature - 3 * diff, max_temperature + 3 * diff, config.temperature_steps)) {
+								transaction.exec(pqxx::prepped { "insert_configurations" }, {
+									config.simulation_id, metadata_id, size, temperature, depth + 1
+								});
+							}
+
+						}
+					}
 				}
 			}
 		}
 
 		db.unprepare("vortex");
 		db.unprepare("insert_metadata");
-		db.unprepare("fetch_metadata");
 		db.unprepare("insert_configurations");
 
+		const bool work = get<0>(transaction.query1<int>(FetchAllWorkDoneQuery.data(), { config.simulation_id })) != 0;
 		transaction.commit();
-		return true;
+
+		return work;
 	} catch (std::exception & e) {
 		std::cout << "[PostgreSQL] Failed to prepare simulation. PostgreSQL exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
@@ -301,7 +373,7 @@ constexpr std::string_view NextVortexQuery = R"~~~~~~(
 SELECT v."vortex_id", v."lattice_size" FROM "vortices" v WHERE v."simulation_id" = $1 AND NOT EXISTS (
 	SELECT * FROM "vortex_results" vr WHERE vr.vortex_id = v.vortex_id
 ) AND (
-	v."worker_id" IS NULL OR v."worker_id" IN (SELECT w."worker_id" FROM "workers" w WHERE w."last_active_at" < unixepoch('now', '-5 minutes'))
+	v."worker_id" IS NULL OR v."worker_id" IN (SELECT w."worker_id" FROM "workers" w WHERE w."last_active_at" < extract(epoch FROM now() - INTERVAL '-5 minutes'))
 );
 )~~~~~~";
 
@@ -356,44 +428,43 @@ void PostgresStorage::save_vortices(const std::size_t vortex_id, std::vector<std
 }
 
 constexpr std::string_view NextChunkQuery = R"~~~~~~(
-SELECT c.configuration_id, IfNull(k.num_chunks, 0) + 1, m.algorithm, c.lattice_size, c.temperature, m.sweeps_per_chunk, k.spins
-FROM simulations s
-INNER JOIN configurations c on s.simulation_id = c.simulation_id
-INNER JOIN metadata m ON c.metadata_id = m.metadata_id
-LEFT JOIN (
-    SELECT k.configuration_id, k.spins, MAX(k."index") AS num_chunks
-    FROM chunks k
-	GROUP BY k.configuration_id
-) k ON c.configuration_id = k.configuration_id
-WHERE s.simulation_id = $1 AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
-	SELECT "worker_id" FROM "workers" WHERE "last_active_at" < unixepoch('now', '-5 minutes')
-)) AND IfNull(k.num_chunks, 0) < m.num_chunks
-ORDER BY IfNull(k.num_chunks, 0) ASC LIMIT 1;
-)~~~~~~";
-
-constexpr std::string_view SetConfigurationActiveWorker = R"~~~~~~(
-UPDATE "configurations" SET "active_worker_id" = $1 WHERE "configuration_id" = $2;
+WITH selected AS (
+	SELECT c.configuration_id, COALESCE(k.num_chunks, 0) + 1, m.algorithm, c.lattice_size, c.temperature, m.sweeps_per_chunk, k.spins
+	FROM simulations s
+	INNER JOIN configurations c on s.simulation_id = c.simulation_id
+	INNER JOIN metadata m ON c.metadata_id = m.metadata_id
+	LEFT JOIN (
+	   SELECT k.configuration_id, k.spins, MAX(k."index") OVER (PARTITION BY k.configuration_id) AS "num_chunks"
+	   FROM chunks k
+	) k ON c.configuration_id = k.configuration_id
+	WHERE s.simulation_id = $1 AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
+		SELECT "worker_id" FROM "workers" WHERE "last_active_at" < CAST(extract(epoch FROM now() - INTERVAL '5 minutes') AS int)
+	)) AND COALESCE(k.num_chunks, 0) < m.num_chunks
+	ORDER BY COALESCE(k.num_chunks, 0) ASC LIMIT 1
+)
+UPDATE configurations SET active_worker_id = $2
+FROM selected WHERE configurations.configuration_id = selected.configuration_id
+RETURNING selected.*
 )~~~~~~";
 
 std::optional<Chunk> PostgresStorage::next_chunk(const int simulation_id) {
+	static std::mutex mtx;
+	std::unique_lock<std::mutex> lock(mtx);
+
 	try {
 		pqxx::work transaction { db };
 
-		const auto configuration_id_opt = transaction.query01<int, int, int, int, double_t, int, std::basic_string<std::byte>>(NextChunkQuery.data(), { simulation_id });
+		const auto configuration_id_opt = transaction.query01<int, int, int, int, double_t, int, std::optional<std::basic_string<std::byte>>>(NextChunkQuery.data(), { simulation_id, worker_id });
 		if (!configuration_id_opt.has_value()) {
 			return std::nullopt;
 		}
 		const auto [configuration_id, index, algorithm, lattice_size, temperature, sweeps_per_chunk, spins_opt] = *configuration_id_opt;
 
-
-		if (transaction.exec(SetConfigurationActiveWorker.data(), { configuration_id, worker_id }).affected_rows() != 1) {
-			return std::nullopt;
-		}
 		transaction.commit();
 
 		std::optional<std::vector<double_t>> spins = std::nullopt;
-		if constexpr (!pqxx::nullness<std::basic_string<std::byte>>::is_null(spins_opt)) {
-			spins = schemas::deserialize(spins_opt.data());
+		if (const auto data = spins_opt) {
+			spins = schemas::deserialize(data->data());
 		}
 
 		return std::optional<Chunk>({
@@ -462,15 +533,20 @@ void PostgresStorage::save_chunk(const Chunk & chunk, const int64_t start_time, 
 }
 
 constexpr std::string_view FetchNextEstimateQuery = R"~~~~~~(
-SELECT c.configuration_id, s.bootstrap_resamples, m.num_chunks, t.type_id
-FROM "simulations" s
-INNER JOIN "configurations" c ON c.simulation_id = s.simulation_id
-INNER JOIN "metadata" m ON c.metadata_id = m.metadata_id
-INNER JOIN "chunks" ch ON c.configuration_id = ch.configuration_id AND ch."index" = m.num_chunks
-CROSS JOIN "types" t ON t.type_id BETWEEN 0 AND 3 OR t.type_id = 6 OR (t.type_id = 8 AND m.algorithm = 1)
-LEFT JOIN "estimates" e ON e.configuration_id = c.configuration_id AND e.type_id = t.type_id
-WHERE s.simulation_id = $1 AND c.active_worker_id IS NULL AND e.type_id IS NULL
-LIMIT 1
+WITH selected AS (
+	SELECT c.configuration_id, s.bootstrap_resamples, m.num_chunks, t.type_id
+	FROM "simulations" s
+	INNER JOIN "configurations" c ON c.simulation_id = s.simulation_id
+	INNER JOIN "metadata" m ON c.metadata_id = m.metadata_id
+	INNER JOIN "chunks" ch ON c.configuration_id = ch.configuration_id AND ch."index" = m.num_chunks
+	CROSS JOIN "types" t
+	LEFT JOIN "estimates" e ON e.configuration_id = c.configuration_id AND e.type_id = t.type_id
+	WHERE s.simulation_id = $1 AND c.active_worker_id IS NULL AND e.type_id IS NULL AND (t.type_id BETWEEN 0 AND 3 OR t.type_id = 6 OR (t.type_id = 8 AND m.algorithm = 1))
+	LIMIT 1
+)
+UPDATE configurations SET active_worker_id = $2
+FROM selected WHERE configurations.configuration_id = selected.configuration_id
+RETURNING selected.*
 )~~~~~~";
 
 constexpr std::string_view FetchConfigurationResults = R"~~~~~~(
@@ -486,18 +562,13 @@ std::optional<std::tuple<Estimate, std::vector<double_t>>> PostgresStorage::next
 		pqxx::work transaction { db };
 
 		const auto estimate_opt = transaction.query01<int, std::size_t, int, int>(FetchNextEstimateQuery.data(), {
-			simulation_id
+			simulation_id, worker_id
 		});
 
 		if (!estimate_opt.has_value()) {
 			return std::nullopt;
 		}
 		const auto [configuration_id, bootstrap_resamples, num_chunks, type] = *estimate_opt;
-
-
-		if (transaction.exec(SetConfigurationActiveWorker.data(), { configuration_id, worker_id }).affected_rows() != 1) {
-			return std::nullopt;
-		}
 
 		std::vector<double_t> values {};
 		for (const auto & [index, buffer] : transaction.query<int, std::basic_string<std::byte>>(FetchConfigurationResults.data(), { configuration_id, type })) {
@@ -529,7 +600,7 @@ void PostgresStorage::save_estimate(const int configuration_id, const int64_t st
 		});
 
 		transaction.exec(RemoveWorkerQuery.data(), {
-			configuration_id, worker_id, worker_id,
+			configuration_id, worker_id,
 		});
 
 		transaction.commit();
@@ -540,13 +611,18 @@ void PostgresStorage::save_estimate(const int configuration_id, const int64_t st
 }
 
 constexpr std::string_view FetchNextDerivativeQuery = R"~~~~~~(
-SELECT e.configuration_id, e.type_id, c.temperature, e.mean, e.std_dev, o.mean, o.std_dev
-FROM "estimates" e
-INNER JOIN "configurations" c ON e.configuration_id = c.configuration_id AND c.simulation_id = $1 AND c.active_worker_id IS NULL
-INNER JOIN "estimates" o ON e.configuration_id = o.configuration_id AND o.type_id = CASE WHEN e.type_id = 0 THEN 1 WHEN e.type_id = 2 THEN 3 ELSE 0 END
-LEFT JOIN "estimates" t ON e.configuration_id = t.configuration_id AND t.type_id = CASE WHEN e.type_id = 0 THEN 4 WHEN e.type_id = 2 THEN 5 ELSE 7 END
-WHERE (e.type_id = 0 OR e.type_id = 2 OR e.type_id = 6) AND (t.configuration_id IS NULL)
-LIMIT 1
+WITH selected AS (
+	SELECT e.configuration_id, e.type_id, c.temperature, e.mean, e.std_dev, o.mean, o.std_dev
+	FROM "estimates" e
+	INNER JOIN "configurations" c ON e.configuration_id = c.configuration_id AND c.simulation_id = $1 AND c.active_worker_id IS NULL
+	INNER JOIN "estimates" o ON e.configuration_id = o.configuration_id AND o.type_id = CASE WHEN e.type_id = 0 THEN 1 WHEN e.type_id = 2 THEN 3 ELSE 0 END
+	LEFT JOIN "estimates" t ON e.configuration_id = t.configuration_id AND t.type_id = CASE WHEN e.type_id = 0 THEN 4 WHEN e.type_id = 2 THEN 5 ELSE 7 END
+	WHERE (e.type_id = 0 OR e.type_id = 2 OR e.type_id = 6) AND (t.configuration_id IS NULL)
+	LIMIT 1
+)
+UPDATE configurations SET active_worker_id = $2
+FROM selected WHERE configurations.configuration_id = selected.configuration_id
+RETURNING selected.*
 )~~~~~~";
 
 std::optional<NextDerivative> PostgresStorage::next_derivative(const int simulation_id) {
@@ -554,7 +630,7 @@ std::optional<NextDerivative> PostgresStorage::next_derivative(const int simulat
 		pqxx::work transaction { db };
 
 		const auto derivative_opt = transaction.query01<int, int, double_t, double_t, double_t, double_t, double_t>(FetchNextDerivativeQuery.data(), {
-			simulation_id
+			simulation_id, worker_id
 		});
 
 		if (!derivative_opt.has_value()) {
@@ -562,11 +638,8 @@ std::optional<NextDerivative> PostgresStorage::next_derivative(const int simulat
 		}
 
 		const auto [ configuration_id, type, temperature, mean, std_dev, square_mean, square_std_dev ] = derivative_opt.value();
-		if (transaction.exec(SetConfigurationActiveWorker.data(), { configuration_id, worker_id }).affected_rows() != 1) {
-			return std::nullopt;
-		}
-
 		transaction.commit();
+
 		return { { configuration_id, static_cast<observables::Type>(type), temperature, mean, std_dev, square_mean, square_std_dev } };
 	} catch (const std::exception & e) {
 		std::cout << "[PostgreSQL] Failed to fetch next derivative. PostgreSQL exception: " << e.what() << std::endl;
@@ -575,7 +648,7 @@ std::optional<NextDerivative> PostgresStorage::next_derivative(const int simulat
 }
 
 constexpr std::string_view UpdateWorkerLastActive = R"~~~~~~(
-UPDATE "workers" SET "last_active_at" = unixepoch() WHERE "worker_id" = $1;
+UPDATE "workers" SET "last_active_at" = extract(epoch FROM now()) WHERE "worker_id" = $1;
 )~~~~~~";
 
 void PostgresStorage::worker_keep_alive() {

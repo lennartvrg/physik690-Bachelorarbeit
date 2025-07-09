@@ -32,10 +32,14 @@ namespace tasks {
 
 			// Create worker threads and fetch initial tasks
 			for (std::size_t i = 0; i < std::thread::hardware_concurrency(); ++i) {
-				workers.emplace_back(&Task::execute_worker, this);
 				if (const auto task = next_task(this->storage)) {
 					available_tasks.push(*task);
 				}
+
+				if (i == 0 && available_tasks.empty()) {
+					return;
+				}
+				workers.emplace_back(&Task::execute_worker, this);
 			}
 
 			// Start workers

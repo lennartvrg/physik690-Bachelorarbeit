@@ -21,6 +21,7 @@ struct Config {
 
 	const int32_t max_temperature;
 	const int32_t temperature_steps;
+	const double_t max_depth;
 
 	const std::unordered_set<std::size_t> vortex_sizes;
 

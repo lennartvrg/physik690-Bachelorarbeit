@@ -25,6 +25,7 @@ Config Config::from_file(const std::string_view path) {
 
 	const auto max_temperature = config["temperature"]["max"].value_or<int32_t>(3);
 	const auto temperature_steps = config["temperature"]["steps"].value_or<int32_t>(64);
+	const auto max_depth = config["temperature"]["max_depth"].value_or<double_t>(1);
 
 	std::unordered_set<std::size_t> vortex_sizes {};
 	config["vortices"]["sizes"].as_array()->for_each([&] <typename T>(T && el) {
@@ -37,5 +38,5 @@ Config Config::from_file(const std::string_view path) {
 	if (const auto node = config["metropolis"]) algorithms.emplace(algorithms::METROPOLIS, parse_algorithm_config(node));
 	if (const auto node = config["wolff"]) algorithms.emplace(algorithms::WOLFF, parse_algorithm_config(node));
 
-	return Config { simulation_id, bootstrap_resamples, max_temperature, temperature_steps, vortex_sizes, algorithms };
+	return Config { simulation_id, bootstrap_resamples, max_temperature, temperature_steps, max_depth, vortex_sizes, algorithms };
 }
