@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS "configurations" (
 	lattice_size			INTEGER				NOT NULL CHECK (lattice_size > 0),
 	temperature				REAL				NOT NULL CHECK (temperature > 0.0),
 
+	depth					INTEGER				NOT NULL,
+
 	CONSTRAINT "PK.Configurations_ConfigurationId" PRIMARY KEY (configuration_id),
 	CONSTRAINT "FK.Configurations_ActiveWorkerId" FOREIGN KEY (active_worker_id) REFERENCES "workers" (worker_id),
 	CONSTRAINT "FK.Configurations_SimulationId"	FOREIGN KEY (simulation_id) REFERENCES "simulations" (simulation_id),
@@ -190,6 +192,14 @@ BEGIN
 		SELECT * FROM "chunks" c WHERE c.chunk_id = NEW.chunk_id AND configuration_id = c.configuration_id
 	);
 END;
+
+CREATE TRIGGER IF NOT EXISTS "TRG.OnUpdatedBootstrapResamples"
+AFTER UPDATE ON "simulations" FOR EACH ROW WHEN NEW.bootstrap_resamples != OLD.bootstrap_resamples
+BEGIN
+	DELETE FROM "estimates" WHERE "configuration_id" IN (
+		SELECT "configuration_id" FROM "configurations" WHERE "simulation_id" = NEW."simulation_id"
+	);
+END;
 )~~~~~~";
 
 constexpr std::string_view RegisterWorkerQuery = R"~~~~~~(
@@ -240,8 +250,42 @@ SELECT metadata_id FROM "metadata" WHERE simulation_id = @simulation_id AND algo
 )~~~~~~";
 
 constexpr std::string_view InsertConfigurationsQuery = R"~~~~~~(
-INSERT INTO "configurations" (simulation_id, metadata_id, lattice_size, temperature) VALUES (@simulation_id, @metadata_id, @lattice_size, @temperature)
+INSERT INTO "configurations" (simulation_id, metadata_id, lattice_size, temperature, depth) VALUES (@simulation_id, @metadata_id, @lattice_size, @temperature, @depth)
 ON CONFLICT DO NOTHING
+)~~~~~~";
+
+constexpr std::string_view FetchAllWorkDoneQuery = R"~~~~~~(
+SELECT COUNT(*) AS count
+FROM configurations c
+    INNER JOIN metadata m ON c.metadata_id = m.metadata_id
+    LEFT JOIN (
+        SELECT c.configuration_id, COUNT(*) AS "done_chunks"
+        FROM configurations c INNER JOIN chunks c2 on c.configuration_id = c2.configuration_id
+        WHERE c.simulation_id = @simulation_id
+        GROUP BY c.configuration_id
+    ) c2 ON c.configuration_id = c2.configuration_id
+    LEFT JOIN (
+        SELECT c.configuration_id, COUNT(*) AS "done_estimates"
+        FROM configurations c INNER JOIN estimates e ON c.configuration_id = e.configuration_id
+        WHERE c.simulation_id = @simulation_id
+        GROUP BY c.configuration_id
+    ) e ON c.configuration_id = e.configuration_id
+WHERE c.simulation_id = @simulation_id AND (c2.configuration_id IS NULL OR e.configuration_id IS NULL OR c2.done_chunks < m.num_chunks OR e.done_estimates != CASE WHEN m.algorithm = 0 THEN 8 ELSE 9 END);
+)~~~~~~";
+
+constexpr std::string_view FetchMaxDepthQuery = R"~~~~~~(
+SELECT MAX(c.depth) AS max_depth
+FROM configurations c
+WHERE c.simulation_id = @simulation_id AND c.metadata_id = @metadata_id AND c.lattice_size = @lattice_size;
+)~~~~~~";
+
+constexpr std::string_view FetchPeakMagneticSusceptibilityQuery = R"~~~~~~(
+SELECT c.temperature, (c.temperature - LAG(c.temperature, 1) OVER (ORDER BY c.temperature)) AS diff
+FROM configurations c
+         INNER JOIN estimates e ON c.configuration_id = e.configuration_id AND e.type_id = 5
+WHERE c.simulation_id = @simulation_id AND c.metadata_id = @metadata_id AND c.lattice_size = @lattice_size
+ORDER BY e.mean DESC
+LIMIT 1;
 )~~~~~~";
 
 bool SQLiteStorage::prepare_simulation(const Config config) {
@@ -280,8 +324,6 @@ bool SQLiteStorage::prepare_simulation(const Config config) {
 
 			if (!fetch_metadata.executeStep()) throw std::invalid_argument("Did not insert metadata");
 			const auto metadata_id = fetch_metadata.getColumn(0).getInt();
-
-			while (fetch_metadata.executeStep()) { }
 			fetch_metadata.reset();
 
 			for (const auto size : value.sizes) {
@@ -290,6 +332,7 @@ bool SQLiteStorage::prepare_simulation(const Config config) {
 					configurations.bind("@metadata_id", metadata_id);
 					configurations.bind("@lattice_size", static_cast<int>(size));
 					configurations.bind("@temperature", temperature);
+					configurations.bind("@depth", 1);
 
 					configurations.exec();
 					configurations.reset();
@@ -297,8 +340,67 @@ bool SQLiteStorage::prepare_simulation(const Config config) {
 			}
 		}
 
+		SQLite::Statement max_depth_query { db, FetchMaxDepthQuery.data() };
+		SQLite::Statement peak_xs_query {db, FetchPeakMagneticSusceptibilityQuery.data() };
+		SQLite::Statement all_work_done { db, FetchAllWorkDoneQuery.data() };
+		all_work_done.bind("@simulation_id", config.simulation_id);
+
+		// Check if all registered configurations are completely done
+		if (all_work_done.executeStep() && all_work_done.getColumn(0).getInt() == 0) {
+			for (const auto & [key, value] : config.algorithms) {
+				// Find metadata row associated with algorithm
+				fetch_metadata.bind("@simulation_id", config.simulation_id);
+				fetch_metadata.bind("@algorithm", key);
+
+				if (!fetch_metadata.executeStep()) throw std::invalid_argument("Did not insert metadata");
+				const auto metadata_id = fetch_metadata.getColumn(0).getInt();
+				fetch_metadata.reset();
+
+				// Iterate over sizes
+				for (const auto size : value.sizes) {
+					// Check depth not yet reached
+					max_depth_query.bind("@simulation_id", config.simulation_id);
+					max_depth_query.bind("@metadata_id", metadata_id);
+					max_depth_query.bind("@lattice_size", static_cast<int>(size));
+
+					// Check depth not yet reached
+					if (max_depth_query.executeStep() && max_depth_query.getColumn(0).getInt() < config.max_depth) {
+						// Fetch the Xs peak by the temperature where it occurred and the space to neighboring data points
+						peak_xs_query.bind("@simulation_id", config.simulation_id);
+						peak_xs_query.bind("@metadata_id", metadata_id);
+						peak_xs_query.bind("@lattice_size", static_cast<int>(size));
+
+						if (peak_xs_query.executeStep()) {
+							const auto max_temperature = peak_xs_query.getColumn(0).getDouble();
+							const auto diff = peak_xs_query.getColumn(1).getDouble();
+
+							for (const auto temperature : utils::sweep_temperature(max_temperature - 3 * diff, max_temperature + 3 * diff, config.temperature_steps)) {
+								configurations.bind("@simulation_id", config.simulation_id);
+								configurations.bind("@metadata_id", metadata_id);
+								configurations.bind("@lattice_size", static_cast<int>(size));
+								configurations.bind("@temperature", temperature);
+								configurations.bind("@depth", max_depth_query.getColumn(0).getInt() + 1);
+
+								configurations.exec();
+								configurations.reset();
+							}
+						}
+						peak_xs_query.reset();
+					}
+					max_depth_query.reset();
+
+				}
+
+			}
+		}
+
+		all_work_done.reset();
+		all_work_done.bind("@simulation_id", config.simulation_id);
+
+		const bool work = all_work_done.executeStep() && all_work_done.getColumn(0).getInt() != 0;
 		transaction.commit();
-		return true;
+
+		return work;
 	} catch (std::exception & e) {
 		std::cout << "[SQLite] Failed to prepare simulation. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
@@ -310,7 +412,7 @@ SELECT v."vortex_id", v."lattice_size" FROM "vortices" v WHERE v."simulation_id"
 	SELECT * FROM "vortex_results" vr WHERE vr.vortex_id = v.vortex_id
 ) AND (
 	v."worker_id" IS NULL OR v."worker_id" IN (SELECT w."worker_id" FROM "workers" w WHERE w."last_active_at" < unixepoch('now', '-5 minutes'))
-);
+)
 )~~~~~~";
 
 constexpr std::string_view SetVortexActiveWorkerId = R"~~~~~~(
@@ -371,7 +473,7 @@ void SQLiteStorage::save_vortices(const std::size_t vortex_id, std::vector<std::
 }
 
 constexpr std::string_view NextChunkQuery = R"~~~~~~(
-SELECT c.configuration_id, IfNull(k.num_chunks, 0) + 1, m.algorithm, c.lattice_size, c.temperature, m.sweeps_per_chunk, k.spins
+SELECT c.configuration_id, IfNull(k.num_chunks, 0) + 1 AS "index", m.algorithm, c.lattice_size, c.temperature, m.sweeps_per_chunk, k.spins
 FROM simulations s
 INNER JOIN configurations c on s.simulation_id = c.simulation_id
 INNER JOIN metadata m ON c.metadata_id = m.metadata_id
@@ -383,7 +485,7 @@ LEFT JOIN (
 WHERE s.simulation_id = @simulation_id AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
 	SELECT "worker_id" FROM "workers" WHERE "last_active_at" < unixepoch('now', '-5 minutes')
 )) AND IfNull(k.num_chunks, 0) < m.num_chunks
-ORDER BY IfNull(k.num_chunks, 0) ASC LIMIT 1;
+ORDER BY IfNull(k.num_chunks, 0) ASC, c.lattice_size DESC LIMIT 1
 )~~~~~~";
 
 constexpr std::string_view SetConfigurationActiveWorker = R"~~~~~~(
@@ -502,7 +604,9 @@ INNER JOIN "metadata" m ON c.metadata_id = m.metadata_id
 INNER JOIN "chunks" ch ON c.configuration_id = ch.configuration_id AND ch."index" = m.num_chunks
 CROSS JOIN "types" t ON t.type_id BETWEEN 0 AND 3 OR t.type_id = 6 OR (t.type_id = 8 AND m.algorithm = 1)
 LEFT JOIN "estimates" e ON e.configuration_id = c.configuration_id AND e.type_id = t.type_id
-WHERE s.simulation_id = @simulation_id AND c.active_worker_id IS NULL AND e.type_id IS NULL
+WHERE s.simulation_id = @simulation_id AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
+	SELECT "worker_id" FROM "workers" WHERE "last_active_at" < unixepoch('now', '-5 minutes')
+)) AND e.type_id IS NULL
 LIMIT 1
 )~~~~~~";
 
@@ -585,10 +689,12 @@ void SQLiteStorage::save_estimate(const int configuration_id, const int64_t star
 constexpr std::string_view FetchNextDerivativeQuery = R"~~~~~~(
 SELECT e.configuration_id, e.type_id, c.temperature, e.mean, e.std_dev, o.mean, o.std_dev
 FROM "estimates" e
-INNER JOIN "configurations" c ON e.configuration_id = c.configuration_id AND c.simulation_id = @simulation_id AND c.active_worker_id IS NULL
+INNER JOIN "configurations" c ON e.configuration_id = c.configuration_id AND c.simulation_id = @simulation_id
 INNER JOIN "estimates" o ON e.configuration_id = o.configuration_id AND o.type_id = CASE WHEN e.type_id = 0 THEN 1 WHEN e.type_id = 2 THEN 3 ELSE 0 END
 LEFT JOIN "estimates" t ON e.configuration_id = t.configuration_id AND t.type_id = CASE WHEN e.type_id = 0 THEN 4 WHEN e.type_id = 2 THEN 5 ELSE 7 END
-WHERE (e.type_id = 0 OR e.type_id = 2 OR e.type_id = 6) AND (t.configuration_id IS NULL)
+WHERE (e.type_id = 0 OR e.type_id = 2 OR e.type_id = 6) AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
+	SELECT "worker_id" FROM "workers" WHERE "last_active_at" < unixepoch('now', '-5 minutes')
+)) AND (t.configuration_id IS NULL)
 LIMIT 1
 )~~~~~~";
 

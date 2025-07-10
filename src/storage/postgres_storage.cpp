@@ -205,6 +205,22 @@ $BODY$ LANGUAGE plpgsql;
 CREATE OR REPLACE TRIGGER "TRG.RemoveOutdatedEstimates"
 AFTER INSERT ON "results" FOR EACH ROW
 EXECUTE FUNCTION "FNC.RemoveOutdatedEstimates"();
+
+CREATE OR REPLACE FUNCTION "FNC.OnUpdatedBootstrapResamples"() RETURNS TRIGGER AS
+$BODY$
+BEGIN
+	IF NEW.bootstrap_resamples != OLD.bootstrap_resamples THEN
+		DELETE FROM "estimates" WHERE "configuration_id" IN (
+			SELECT "configuration_id" FROM "configurations" WHERE "simulation_id" = NEW."simulation_id"
+		);
+	END IF;
+	RETURN NEW;
+END;
+$BODY$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER "TRG.OnUpdatedBootstrapResamples"
+AFTER UPDATE ON "simulations" FOR EACH ROW
+EXECUTE FUNCTION "FNC.OnUpdatedBootstrapResamples"();
 )~~~~~~";
 
 constexpr std::string_view RegisterWorkerQuery = R"~~~~~~(
@@ -370,32 +386,32 @@ bool PostgresStorage::prepare_simulation(const Config config) {
 }
 
 constexpr std::string_view NextVortexQuery = R"~~~~~~(
-SELECT v."vortex_id", v."lattice_size" FROM "vortices" v WHERE v."simulation_id" = $1 AND NOT EXISTS (
-	SELECT * FROM "vortex_results" vr WHERE vr.vortex_id = v.vortex_id
-) AND (
-	v."worker_id" IS NULL OR v."worker_id" IN (SELECT w."worker_id" FROM "workers" w WHERE w."last_active_at" < extract(epoch FROM now() - INTERVAL '-5 minutes'))
-);
-)~~~~~~";
-
-constexpr std::string_view SetVortexActiveWorkerId = R"~~~~~~(
-UPDATE "vortices" SET "worker_id" = $1 WHERE "vortex_id" = $2;
+WITH selected AS (
+	SELECT v."vortex_id", v."lattice_size" FROM "vortices" v WHERE v."simulation_id" = $1 AND NOT EXISTS (
+		SELECT * FROM "vortex_results" vr WHERE vr.vortex_id = v.vortex_id
+	) AND (
+		v."worker_id" IS NULL OR v."worker_id" IN (SELECT w."worker_id" FROM "workers" w WHERE w."last_active_at" < extract(epoch FROM now() - INTERVAL '-5 minutes'))
+	)
+)
+UPDATE vortices SET worker_id = $2
+FROM selected WHERE vortices.vortex_id = selected.vortex_id
+RETURNING selected."vortex_id", selected."lattice_size";
 )~~~~~~";
 
 std::optional<std::tuple<std::size_t, std::size_t>> PostgresStorage::next_vortex(const int simulation_id) {
 	try {
 		pqxx::work transaction { db };
 
-		const auto pair = transaction.query01<int, int>(NextVortexQuery.data(), { simulation_id });
+		const auto pair = transaction.query01<int, int>(NextVortexQuery.data(), {
+			simulation_id, worker_id
+		});
+
+		transaction.commit();
 		if (!pair.has_value()) {
 			return std::nullopt;
 		}
+
 		const auto [vortex_id, lattice_size] = *pair;
-
-		if (transaction.exec(SetVortexActiveWorkerId.data(), { vortex_id, worker_id }).affected_rows() != 1) {
-			return std::nullopt;
-		}
-		transaction.commit();
-
 		return {{ static_cast<std::size_t>(vortex_id), static_cast<std::size_t>(lattice_size) }};
 	} catch (std::exception & e) {
 		std::cout << "[PostgreSQL] Failed to fetch next vortex. PostgreSQL exception: " << e.what() << std::endl;
@@ -429,7 +445,7 @@ void PostgresStorage::save_vortices(const std::size_t vortex_id, std::vector<std
 
 constexpr std::string_view NextChunkQuery = R"~~~~~~(
 WITH selected AS (
-	SELECT c.configuration_id, COALESCE(k.num_chunks, 0) + 1, m.algorithm, c.lattice_size, c.temperature, m.sweeps_per_chunk, k.spins
+	SELECT c.configuration_id, COALESCE(k.num_chunks, 0) + 1 AS "index", m.algorithm, c.lattice_size, c.temperature, m.sweeps_per_chunk, k.spins
 	FROM simulations s
 	INNER JOIN configurations c on s.simulation_id = c.simulation_id
 	INNER JOIN metadata m ON c.metadata_id = m.metadata_id
@@ -440,27 +456,23 @@ WITH selected AS (
 	WHERE s.simulation_id = $1 AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
 		SELECT "worker_id" FROM "workers" WHERE "last_active_at" < CAST(extract(epoch FROM now() - INTERVAL '5 minutes') AS int)
 	)) AND COALESCE(k.num_chunks, 0) < m.num_chunks
-	ORDER BY COALESCE(k.num_chunks, 0) ASC LIMIT 1
+	ORDER BY COALESCE(k.num_chunks, 0) ASC, c.lattice_size DESC LIMIT 1
 )
 UPDATE configurations SET active_worker_id = $2
 FROM selected WHERE configurations.configuration_id = selected.configuration_id
-RETURNING selected.*
+RETURNING selected.configuration_id, selected."index", selected.algorithm, selected.lattice_size, selected.temperature, selected.sweeps_per_chunk, selected.spins
 )~~~~~~";
 
 std::optional<Chunk> PostgresStorage::next_chunk(const int simulation_id) {
-	static std::mutex mtx;
-	std::unique_lock<std::mutex> lock(mtx);
-
 	try {
 		pqxx::work transaction { db };
-
-		const auto configuration_id_opt = transaction.query01<int, int, int, int, double_t, int, std::optional<std::basic_string<std::byte>>>(NextChunkQuery.data(), { simulation_id, worker_id });
-		if (!configuration_id_opt.has_value()) {
-			return std::nullopt;
-		}
-		const auto [configuration_id, index, algorithm, lattice_size, temperature, sweeps_per_chunk, spins_opt] = *configuration_id_opt;
-
+		const auto configuration_id_opt = transaction.query01<int, int, int, int, double_t, int, std::optional<std::basic_string<std::byte>>>(NextChunkQuery.data(), {
+			simulation_id, worker_id
+		});
 		transaction.commit();
+
+		if (!configuration_id_opt.has_value()) return std::nullopt;
+		const auto [configuration_id, index, algorithm, lattice_size, temperature, sweeps_per_chunk, spins_opt] = *configuration_id_opt;
 
 		std::optional<std::vector<double_t>> spins = std::nullopt;
 		if (const auto data = spins_opt) {
@@ -541,12 +553,14 @@ WITH selected AS (
 	INNER JOIN "chunks" ch ON c.configuration_id = ch.configuration_id AND ch."index" = m.num_chunks
 	CROSS JOIN "types" t
 	LEFT JOIN "estimates" e ON e.configuration_id = c.configuration_id AND e.type_id = t.type_id
-	WHERE s.simulation_id = $1 AND c.active_worker_id IS NULL AND e.type_id IS NULL AND (t.type_id BETWEEN 0 AND 3 OR t.type_id = 6 OR (t.type_id = 8 AND m.algorithm = 1))
+	WHERE s.simulation_id = $1 AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
+		SELECT "worker_id" FROM "workers" WHERE "last_active_at" < CAST(extract(epoch FROM now() - INTERVAL '5 minutes') AS int)
+	)) AND e.type_id IS NULL AND (t.type_id BETWEEN 0 AND 3 OR t.type_id = 6 OR (t.type_id = 8 AND m.algorithm = 1))
 	LIMIT 1
 )
 UPDATE configurations SET active_worker_id = $2
 FROM selected WHERE configurations.configuration_id = selected.configuration_id
-RETURNING selected.*
+RETURNING selected.configuration_id, selected.bootstrap_resamples, selected.num_chunks, selected.type_id
 )~~~~~~";
 
 constexpr std::string_view FetchConfigurationResults = R"~~~~~~(
@@ -614,15 +628,17 @@ constexpr std::string_view FetchNextDerivativeQuery = R"~~~~~~(
 WITH selected AS (
 	SELECT e.configuration_id, e.type_id, c.temperature, e.mean, e.std_dev, o.mean, o.std_dev
 	FROM "estimates" e
-	INNER JOIN "configurations" c ON e.configuration_id = c.configuration_id AND c.simulation_id = $1 AND c.active_worker_id IS NULL
+	INNER JOIN "configurations" c ON e.configuration_id = c.configuration_id AND c.simulation_id = $1
 	INNER JOIN "estimates" o ON e.configuration_id = o.configuration_id AND o.type_id = CASE WHEN e.type_id = 0 THEN 1 WHEN e.type_id = 2 THEN 3 ELSE 0 END
 	LEFT JOIN "estimates" t ON e.configuration_id = t.configuration_id AND t.type_id = CASE WHEN e.type_id = 0 THEN 4 WHEN e.type_id = 2 THEN 5 ELSE 7 END
-	WHERE (e.type_id = 0 OR e.type_id = 2 OR e.type_id = 6) AND (t.configuration_id IS NULL)
+	WHERE (e.type_id = 0 OR e.type_id = 2 OR e.type_id = 6) AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
+		SELECT "worker_id" FROM "workers" WHERE "last_active_at" < unixepoch('now', '-5 minutes')
+	)) AND (t.configuration_id IS NULL)
 	LIMIT 1
 )
 UPDATE configurations SET active_worker_id = $2
 FROM selected WHERE configurations.configuration_id = selected.configuration_id
-RETURNING selected.*
+RETURNING selected.configuration_id, selected.type_id, selected.temperature, selected.mean, selected.std_dev, selected.mean, selected.std_dev
 )~~~~~~";
 
 std::optional<NextDerivative> PostgresStorage::next_derivative(const int simulation_id) {
@@ -633,13 +649,12 @@ std::optional<NextDerivative> PostgresStorage::next_derivative(const int simulat
 			simulation_id, worker_id
 		});
 
+		transaction.commit();
 		if (!derivative_opt.has_value()) {
 			return std::nullopt;
 		}
 
 		const auto [ configuration_id, type, temperature, mean, std_dev, square_mean, square_std_dev ] = derivative_opt.value();
-		transaction.commit();
-
 		return { { configuration_id, static_cast<observables::Type>(type), temperature, mean, std_dev, square_mean, square_std_dev } };
 	} catch (const std::exception & e) {
 		std::cout << "[PostgreSQL] Failed to fetch next derivative. PostgreSQL exception: " << e.what() << std::endl;
