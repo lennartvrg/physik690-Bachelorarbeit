@@ -224,7 +224,7 @@ EXECUTE FUNCTION "FNC.OnUpdatedBootstrapResamples"();
 )~~~~~~";
 
 constexpr std::string_view RegisterWorkerQuery = R"~~~~~~(
-INSERT INTO "workers" (name, last_active_at) VALUES ($1, CAST(extract(epoch FROM now() - INTERVAL '5 minutes') AS int)) RETURNING "worker_id"
+INSERT INTO "workers" (name, last_active_at) VALUES ($1, CAST(extract(epoch FROM now()) AS int)) RETURNING "worker_id"
 )~~~~~~";
 
 PostgresStorage::PostgresStorage(const std::string_view & connection_string) : worker_id(-1), db(connection_string.data()) {
