@@ -47,6 +47,7 @@ namespace tasks {
 			available_tasks_signal.notify_all();
 
 			// Wait for results
+			auto last_keep_alive = std::chrono::system_clock::now();
 			while (!exit_flag) {
 				std::unique_lock lock { available_results_signal_mutex };
 				available_results_signal.wait_for(lock, std::chrono::seconds(1), [&] {
@@ -55,9 +56,14 @@ namespace tasks {
 				});
 				lock.unlock();
 
-				// Save the complete queue and send keep alive message
+				// Save the complete queue
 				save_queue(available_results, available_results_mutex);
-				this->storage->worker_keep_alive();
+
+				// Send a keep alive message every 10 seconds
+				if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - last_keep_alive).count() >= 10) {
+					last_keep_alive = std::chrono::system_clock::now();
+					this->storage->worker_keep_alive();
+				}
 
 				// Fill missing tasks
 				lock_tasks.lock();

@@ -24,7 +24,7 @@ namespace tasks {
 			const auto [vortex_id, size] = pair;
 
 			std::size_t sweeps = 100000;
-			Lattice lattice { size, 0.5, std::nullopt };
+			Lattice lattice { size, 1.0, std::nullopt };
 
 			// Thermalize
 			std::cout << "[Vortices] Thermalizing for " << sweeps << " sweeps" << std::endl;
@@ -32,7 +32,7 @@ namespace tasks {
 
 			// Transition from hot to cold state
 			std::vector<std::tuple<double_t, std::size_t, std::vector<double_t>>> results;
-			for (const auto temperature : utils::sweep_temperature_rev(0.0, 2.0, 90)) {
+			for (const auto temperature : utils::sweep_temperature_rev(0.0, 1.0, 120)) {
 				std::cout << "[Vortices] Simulating at t " << std::fixed << std::setprecision(2) << temperature << std::endl;
 				lattice.set_beta(1.0 / temperature);
 
@@ -44,8 +44,8 @@ namespace tasks {
 			}
 
 			// Wait for vortices to dissolve
-			for (const auto _ : std::views::iota(0, 2000)) {
-				algorithms::simulate(lattice, rng, 20, algorithms::METROPOLIS);
+			for (const auto _ : std::views::iota(0, 2400)) {
+				algorithms::simulate(lattice, rng, 60, algorithms::METROPOLIS);
 				results.emplace_back(get<0>(results.at(results.size() - 1)), sweeps += 20, lattice.get_spins());
 			}
 

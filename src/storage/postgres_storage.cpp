@@ -126,14 +126,14 @@ CREATE OR REPLACE FUNCTION "FNC.RemoveInactiveWorkers"() RETURNS TRIGGER AS
 $BODY$
 BEGIN
 	UPDATE "configurations" SET "active_worker_id" = NULL WHERE "active_worker_id" IN (
-		SELECT "worker_id" FROM "workers" WHERE "last_active_at" < extract(epoch FROM now() - INTERVAL '-5 minutes')
+		SELECT "worker_id" FROM "workers" WHERE "last_active_at" < CAST(extract(epoch FROM now() - INTERVAL '5 minutes') AS int)
 	);
 
 	DELETE FROM "workers" WHERE NOT EXISTS (
 		SELECT * FROM "configurations" c WHERE c."active_worker_id" = "worker_id"
 	) AND NOT EXISTS (
 		SELECT * FROM "chunks" c WHERE c."worker_id" = "worker_id"
-	) AND "last_active_at" < extract(epoch FROM now() - INTERVAL '-5 minutes');
+	) AND "last_active_at" < CAST(extract(epoch FROM now() - INTERVAL '5 minutes') AS int);
 	RETURN NEW;
 END;
 $BODY$ LANGUAGE plpgsql;
@@ -224,7 +224,7 @@ EXECUTE FUNCTION "FNC.OnUpdatedBootstrapResamples"();
 )~~~~~~";
 
 constexpr std::string_view RegisterWorkerQuery = R"~~~~~~(
-INSERT INTO "workers" (name, last_active_at) VALUES ($1, $2) RETURNING "worker_id"
+INSERT INTO "workers" (name, last_active_at) VALUES ($1, CAST(extract(epoch FROM now() - INTERVAL '5 minutes') AS int)) RETURNING "worker_id"
 )~~~~~~";
 
 PostgresStorage::PostgresStorage(const std::string_view & connection_string) : worker_id(-1), db(connection_string.data()) {
@@ -232,7 +232,7 @@ PostgresStorage::PostgresStorage(const std::string_view & connection_string) : w
 		pqxx::work transaction { db };
 		transaction.exec(POSTGRES_MIGRATIONS.data());
 
-		for (auto [worker_id] : transaction.query<int>(RegisterWorkerQuery.data(), { utils::hostname(), utils::timestamp_ms() })) {
+		for (auto [worker_id] : transaction.query<int>(RegisterWorkerQuery.data(), { utils::hostname() })) {
 			this->worker_id = worker_id;
 		}
 
@@ -356,10 +356,15 @@ bool PostgresStorage::prepare_simulation(const Config config) {
 						});
 
 						if (pair.has_value()) {
-							const auto [max_temperature, diff] = *pair;
+							// Extract temperature where xs is max and step size
+							const auto [xs_temperature, diff] = *pair;
+
+							// Determine new bounds around the temperature where xs is max
+							const auto min_temperature = xs_temperature - 2 * diff;
+							const auto max_temperature = xs_temperature + 2 * diff;
 
 							// Add configurations
-							for (const auto temperature : utils::sweep_temperature(max_temperature - 3 * diff, max_temperature + 3 * diff, config.temperature_steps)) {
+							for (const auto temperature : utils::sweep_temperature(min_temperature, max_temperature, config.temperature_steps, false)) {
 								transaction.exec(pqxx::prepped { "insert_configurations" }, {
 									config.simulation_id, metadata_id, size, temperature, depth + 1
 								});
@@ -390,12 +395,12 @@ WITH selected AS (
 	SELECT v."vortex_id", v."lattice_size" FROM "vortices" v WHERE v."simulation_id" = $1 AND NOT EXISTS (
 		SELECT * FROM "vortex_results" vr WHERE vr.vortex_id = v.vortex_id
 	) AND (
-		v."worker_id" IS NULL OR v."worker_id" IN (SELECT w."worker_id" FROM "workers" w WHERE w."last_active_at" < extract(epoch FROM now() - INTERVAL '-5 minutes'))
+		v."worker_id" IS NULL OR v."worker_id" IN (SELECT w."worker_id" FROM "workers" w WHERE w."last_active_at" < CAST(extract(epoch FROM now() - INTERVAL '5 minutes') AS int))
 	)
 )
 UPDATE vortices SET worker_id = $2
 FROM selected WHERE vortices.vortex_id = selected.vortex_id
-RETURNING selected."vortex_id", selected."lattice_size";
+RETURNING selected.*;
 )~~~~~~";
 
 std::optional<std::tuple<std::size_t, std::size_t>> PostgresStorage::next_vortex(const int simulation_id) {
@@ -460,7 +465,7 @@ WITH selected AS (
 )
 UPDATE configurations SET active_worker_id = $2
 FROM selected WHERE configurations.configuration_id = selected.configuration_id
-RETURNING selected.configuration_id, selected."index", selected.algorithm, selected.lattice_size, selected.temperature, selected.sweeps_per_chunk, selected.spins
+RETURNING selected.*
 )~~~~~~";
 
 std::optional<Chunk> PostgresStorage::next_chunk(const int simulation_id) {
@@ -560,7 +565,7 @@ WITH selected AS (
 )
 UPDATE configurations SET active_worker_id = $2
 FROM selected WHERE configurations.configuration_id = selected.configuration_id
-RETURNING selected.configuration_id, selected.bootstrap_resamples, selected.num_chunks, selected.type_id
+RETURNING selected.*
 )~~~~~~";
 
 constexpr std::string_view FetchConfigurationResults = R"~~~~~~(
@@ -632,13 +637,13 @@ WITH selected AS (
 	INNER JOIN "estimates" o ON e.configuration_id = o.configuration_id AND o.type_id = CASE WHEN e.type_id = 0 THEN 1 WHEN e.type_id = 2 THEN 3 ELSE 0 END
 	LEFT JOIN "estimates" t ON e.configuration_id = t.configuration_id AND t.type_id = CASE WHEN e.type_id = 0 THEN 4 WHEN e.type_id = 2 THEN 5 ELSE 7 END
 	WHERE (e.type_id = 0 OR e.type_id = 2 OR e.type_id = 6) AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
-		SELECT "worker_id" FROM "workers" WHERE "last_active_at" < unixepoch('now', '-5 minutes')
+		SELECT "worker_id" FROM "workers" WHERE "last_active_at" < CAST(extract(epoch FROM now() - INTERVAL '5 minutes') AS int)
 	)) AND (t.configuration_id IS NULL)
 	LIMIT 1
 )
 UPDATE configurations SET active_worker_id = $2
 FROM selected WHERE configurations.configuration_id = selected.configuration_id
-RETURNING selected.configuration_id, selected.type_id, selected.temperature, selected.mean, selected.std_dev, selected.mean, selected.std_dev
+RETURNING selected.*
 )~~~~~~";
 
 std::optional<NextDerivative> PostgresStorage::next_derivative(const int simulation_id) {
@@ -663,7 +668,7 @@ std::optional<NextDerivative> PostgresStorage::next_derivative(const int simulat
 }
 
 constexpr std::string_view UpdateWorkerLastActive = R"~~~~~~(
-UPDATE "workers" SET "last_active_at" = extract(epoch FROM now()) WHERE "worker_id" = $1;
+UPDATE "workers" SET "last_active_at" = CAST(extract(epoch FROM now()) AS int) WHERE "worker_id" = $1;
 )~~~~~~";
 
 void PostgresStorage::worker_keep_alive() {

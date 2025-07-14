@@ -31,15 +31,15 @@ double_t utils::mm256_reduce_add_pd(const simde__m256d v) {
     return simde_mm_cvtsd_f64(simde_mm_add_sd(low, high64));
 }
 
-std::generator<double_t> utils::sweep_temperature(const double_t min_temperature, const double_t max_temperature, const int32_t steps) {
+std::generator<double_t> utils::sweep_temperature(const double_t min_temperature, const double_t max_temperature, const int32_t steps, const bool end_inclusive) {
     for (const auto n : std::ranges::views::iota(1, steps + 1)) {
-        co_yield { min_temperature + (max_temperature - min_temperature) * static_cast<double_t>(n) / static_cast<double_t>(steps) };
+        co_yield { min_temperature + (max_temperature - min_temperature) * static_cast<double_t>(n) / static_cast<double_t>(end_inclusive ? steps : steps + 1) };
     }
 }
 
-std::generator<double_t> utils::sweep_temperature_rev(const double_t min_temperature, const double_t max_temperature, const int32_t steps) {
+std::generator<double_t> utils::sweep_temperature_rev(const double_t min_temperature, const double_t max_temperature, const int32_t steps, const bool end_inclusive) {
     for (const auto n : std::ranges::views::iota(0, steps)) {
-        co_yield { min_temperature + (max_temperature - min_temperature) * static_cast<double_t>(steps - n) / static_cast<double_t>(steps) };
+        co_yield { min_temperature + (max_temperature - min_temperature) * static_cast<double_t>(steps - n) / static_cast<double_t>(end_inclusive ? steps : steps + 1) };
     }
 }
 

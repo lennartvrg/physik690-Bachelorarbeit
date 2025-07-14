@@ -188,8 +188,8 @@ CREATE TABLE IF NOT EXISTS "results" (
 CREATE TRIGGER IF NOT EXISTS "TRG.RemoveOutdatedEstimates"
 AFTER INSERT ON "results" FOR EACH ROW
 BEGIN
-	DELETE FROM "estimates" WHERE type_id = NEW.type_id AND EXISTS (
-		SELECT * FROM "chunks" c WHERE c.chunk_id = NEW.chunk_id AND configuration_id = c.configuration_id
+	DELETE FROM "estimates" WHERE type_id = NEW.type_id AND configuration_id IN (
+		SELECT configuration_id FROM "chunks" c WHERE c.chunk_id = NEW.chunk_id
 	);
 END;
 
@@ -203,7 +203,7 @@ END;
 )~~~~~~";
 
 constexpr std::string_view RegisterWorkerQuery = R"~~~~~~(
-INSERT INTO "workers" (name, last_active_at) VALUES (@name, @last_active_at) RETURNING "worker_id"
+INSERT INTO "workers" (name, last_active_at) VALUES (@name, unixepoch('now')) RETURNING "worker_id"
 )~~~~~~";
 
 SQLiteStorage::SQLiteStorage(const std::string_view & path) : worker_id(-1), db(path, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE | SQLite::OPEN_NOMUTEX) {
@@ -217,7 +217,6 @@ SQLiteStorage::SQLiteStorage(const std::string_view & path) : worker_id(-1), db(
 
 		SQLite::Statement worker { db, RegisterWorkerQuery.data() };
 		worker.bind("@name", utils::hostname());
-		worker.bind("@last_active_at", utils::timestamp_ms());
 
 		if (!worker.executeStep()) throw std::invalid_argument("Did not insert worker!");
 		worker_id = worker.getColumn(0).getInt();
@@ -371,10 +370,15 @@ bool SQLiteStorage::prepare_simulation(const Config config) {
 						peak_xs_query.bind("@lattice_size", static_cast<int>(size));
 
 						if (peak_xs_query.executeStep()) {
-							const auto max_temperature = peak_xs_query.getColumn(0).getDouble();
+							// Extract temperature where xs is max and step size
+							const auto xs_temperature = peak_xs_query.getColumn(0).getDouble();
 							const auto diff = peak_xs_query.getColumn(1).getDouble();
 
-							for (const auto temperature : utils::sweep_temperature(max_temperature - 3 * diff, max_temperature + 3 * diff, config.temperature_steps)) {
+							// Determine new bounds around the temperature where xs is max
+							const auto min_temperature = xs_temperature - 2.0 * diff;
+							const auto max_temperature = xs_temperature + 2.0 * diff;
+
+							for (const auto temperature : utils::sweep_temperature(min_temperature, max_temperature, config.temperature_steps, false)) {
 								configurations.bind("@simulation_id", config.simulation_id);
 								configurations.bind("@metadata_id", metadata_id);
 								configurations.bind("@lattice_size", static_cast<int>(size));
@@ -729,7 +733,7 @@ std::optional<NextDerivative> SQLiteStorage::next_derivative(const int simulatio
 }
 
 constexpr std::string_view UpdateWorkerLastActive = R"~~~~~~(
-UPDATE "workers" SET "last_active_at" = unixepoch() WHERE "worker_id" = @worker_id;
+UPDATE "workers" SET "last_active_at" = unixepoch('now') WHERE "worker_id" = @worker_id;
 )~~~~~~";
 
 void SQLiteStorage::worker_keep_alive() {
