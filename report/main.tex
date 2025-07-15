@@ -1,0 +1,104 @@
+\documentclass[a4paper,11pt,titlepage,twoside,listof=totoc,bibliography=totoc,parskip=half]{scrbook}
+
+% recommended defaults
+\usepackage{babel}%
+\usepackage[utf8]{inputenc}%
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{siunitx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage[round]{natbib}   % omit 'round' option if you prefer square brackets
+\bibliographystyle{plainnat}
+\sisetup{per-mode=fraction}
+
+
+% optional packages, yet recommended
+\usepackage{amsmath,amssymb,amsthm} 
+\usepackage{subcaption}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage[style=english]{csquotes}
+\usepackage{float}
+\usepackage[section]{placeins}
+\usepackage{derivative}
+\usepackage{minted}
+
+\usepackage[automark]{scrlayer-scrpage}
+\pagestyle{scrheadings}
+
+% configure some packages and macros
+\usepackage{xspace}
+\newcommand*{\zb}{z.B.\@\xspace}
+\newcommand*\InputTable[1]{\input{./tables/#1.tex}}
+
+\DeclareSIUnit\J{J}
+\DeclareSIUnit\kb{k_B}
+\newcommand*{\carry}[1][1]{\overset{#1}}
+\newcolumntype{B}[1]{r*{#1}{@{\,}r}}
+%\AddToHook{cmd/section/before}{\clearpage}
+\graphicspath{ {../figures/} }
+
+\title{Studying the Kosterlitz-Thouless Transition of the two dimensional XY model using Monte Carlo methods}
+\author{Lennart Voorgang}
+\date{}
+\publishers{\LARGE
+	\begin{otherlanguage}{ngerman}
+		Bachelorarbeit in Physik\\
+		angefertigt am Helmholtz-Institut für Strahlen- und Kernphysik\\[3ex]
+		vorgelegt der\\
+		Mathematisch-Naturwissenschaftlichen Fakultät\\
+		der\\
+		Rheinischen Friedrich-Wilhelms-Universität\\
+		Bonn\\[3ex]
+		August 2025
+	\end{otherlanguage}
+	\vspace*{\fill}
+}
+\lowertitleback{%
+	\begin{otherlanguage}{ngerman}
+		I hereby declare that this thesis was formulated by myself and that no sources or tools other than those cited were used.
+		
+		\vspace*{6ex minus 0.5ex}
+		
+		\begin{tabular}{@{}lc@{\hspace*{4.0cm}}c}
+			Bonn, &  \makebox[3cm]{\dotfill} & \makebox[6cm]{\dotfill}\\
+			& Date & Signature
+		\end{tabular}
+	\end{otherlanguage}
+	
+	\vspace*{10ex minus 4ex}
+	
+	\noindent
+	\begin{otherlanguage}{ngerman}
+		\begin{tabular}{@{}ll}
+			1. Assessor: & Prof. Dr. Stefan Krieg \\
+			2. Assessor: & TBD
+		\end{tabular}
+	\end{otherlanguage}
+}
+
+
+\begin{document}
+	\frontmatter
+		\maketitle
+		\tableofcontents
+		\thispagestyle{empty}
+
+	\mainmatter	
+		% Introduction
+		\input{chapters/introduction/introduction}
+		
+		% Theoretical background
+		\input{chapters/theory/phase_transitions}
+		\input{chapters/theory/xy_model}
+		\input{chapters/theory/numerical_methods}
+
+	\backmatter\pagenumbering{Roman}
+		\listoffigures
+		\bibliography{refs}
+	
+\end{document}
