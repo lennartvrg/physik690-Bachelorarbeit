@@ -15,15 +15,15 @@ max_depth = 1
 sizes = [ 128 ]
 
 [metropolis]
-num_chunks = 20
-sweeps_per_chunk = 100000
+num_chunks = 24
+sweeps_per_chunk = 50000
 sizes = [
     4, 8, 16, 32, 48, 56, 64, 80, 98, 112, 128
 ]
 
 [wolff]
-num_chunks = 10
-sweeps_per_chunk = 100000
+num_chunks = 12
+sweeps_per_chunk = 50000
 sizes = [
     4, 8, 16, 32, 48, 56, 64, 80, 98, 112, 128
 ]

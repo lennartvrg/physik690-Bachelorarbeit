@@ -1,6 +1,6 @@
 [submodule "thirdparty/SQLiteCpp"]
 	path = thirdparty/SQLiteCpp
-	url = git@github.com:SRombauts/SQLiteCpp.git
+	url = https://github.com/SRombauts/SQLiteCpp.git
 [submodule "thirdparty/Xoshiro-cpp"]
 	path = thirdparty/Xoshiro-cpp
-	url = git@github.com:Reputeless/Xoshiro-cpp.git
+	url = https://github.com/Reputeless/Xoshiro-cpp.git
