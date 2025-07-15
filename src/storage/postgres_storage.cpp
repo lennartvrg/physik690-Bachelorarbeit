@@ -229,7 +229,7 @@ INSERT INTO "workers" (name, last_active_at) VALUES ($1, CAST(extract(epoch FROM
 
 PostgresStorage::PostgresStorage(const std::string_view & connection_string) : worker_id(-1), db(connection_string.data()) {
 	try {
-		pqxx::work transaction { db };
+		pqxx::transaction<pqxx::repeatable_read> transaction { db };
 		transaction.exec(POSTGRES_MIGRATIONS.data());
 
 		for (auto [worker_id] : transaction.query<int>(RegisterWorkerQuery.data(), { utils::hostname() })) {
@@ -304,7 +304,7 @@ LIMIT 1;
 
 bool PostgresStorage::prepare_simulation(const Config config) {
 	try {
-		pqxx::work transaction { db };
+		pqxx::transaction<pqxx::repeatable_read> transaction { db };
 
 		transaction.exec(InsertSimulationQuery.data(), {
 			config.simulation_id,
@@ -405,7 +405,7 @@ RETURNING selected.*;
 
 std::optional<std::tuple<std::size_t, std::size_t>> PostgresStorage::next_vortex(const int simulation_id) {
 	try {
-		pqxx::work transaction { db };
+		pqxx::transaction<pqxx::repeatable_read> transaction { db };
 
 		const auto pair = transaction.query01<int, int>(NextVortexQuery.data(), {
 			simulation_id, worker_id
@@ -430,7 +430,7 @@ INSERT INTO "vortex_results" (vortex_id, sweeps, temperature, spins) VALUES ($1,
 
 void PostgresStorage::save_vortices(const std::size_t vortex_id, std::vector<std::tuple<double_t, std::size_t, std::vector<double_t>>> results) {
 	try {
-		pqxx::work transaction { db };
+		pqxx::transaction<pqxx::repeatable_read> transaction { db };
 
 		db.prepare("insert_vortex", InsertVortexResultsQuery.data());
 		for (const auto & [temperature, sweeps, spins] : results) {
@@ -470,7 +470,7 @@ RETURNING selected.*
 
 std::optional<Chunk> PostgresStorage::next_chunk(const int simulation_id) {
 	try {
-		pqxx::work transaction { db };
+		pqxx::transaction<pqxx::repeatable_read> transaction { db };
 		const auto configuration_id_opt = transaction.query01<int, int, int, int, double_t, int, std::optional<std::basic_string<std::byte>>>(NextChunkQuery.data(), {
 			simulation_id, worker_id
 		});
@@ -518,7 +518,7 @@ UPDATE "configurations" SET active_worker_id = NULL WHERE "configuration_id" = $
 
 void PostgresStorage::save_chunk(const Chunk & chunk, const int64_t start_time, const int64_t end_time, const std::span<const uint8_t> & spins, const std::map<observables::Type, std::tuple<double_t, std::vector<uint8_t>, std::optional<std::vector<uint8_t>>>> & results) {
 	try {
-		pqxx::work transaction { db };
+		pqxx::transaction<pqxx::repeatable_read> transaction { db };
 
 		const auto [chunk_id] = transaction.query1<int>(InsertChunkQuery.data(), {
 			chunk.configuration_id, chunk.index, start_time, end_time, worker_id, pqxx::binary_cast(spins.data(), spins.size())
@@ -578,7 +578,7 @@ ORDER BY c."index"
 
 std::optional<std::tuple<Estimate, std::vector<double_t>>> PostgresStorage::next_estimate(const int simulation_id) {
 	try {
-		pqxx::work transaction { db };
+		pqxx::transaction<pqxx::repeatable_read> transaction { db };
 
 		const auto estimate_opt = transaction.query01<int, std::size_t, int, int>(FetchNextEstimateQuery.data(), {
 			simulation_id, worker_id
@@ -612,7 +612,7 @@ INSERT INTO "estimates" (configuration_id, type_id, start_time, end_time, mean, 
 
 void PostgresStorage::save_estimate(const int configuration_id, const int64_t start_time, const int64_t end_time, const observables::Type type, const double_t mean, const double_t std_dev) {
 	try {
-		pqxx::work transaction { db };
+		pqxx::transaction<pqxx::repeatable_read> transaction { db };
 
 		transaction.exec(InsertEstimateQuery.data(), {
 			configuration_id, static_cast<int>(type), start_time, end_time, mean, std_dev
@@ -648,7 +648,7 @@ RETURNING selected.*
 
 std::optional<NextDerivative> PostgresStorage::next_derivative(const int simulation_id) {
 	try {
-		pqxx::work transaction { db };
+		pqxx::transaction<pqxx::repeatable_read> transaction { db };
 
 		const auto derivative_opt = transaction.query01<int, int, double_t, double_t, double_t, double_t, double_t>(FetchNextDerivativeQuery.data(), {
 			simulation_id, worker_id
@@ -673,7 +673,7 @@ UPDATE "workers" SET "last_active_at" = CAST(extract(epoch FROM now()) AS int) W
 
 void PostgresStorage::worker_keep_alive() {
 	try {
-		pqxx::work transaction { db };
+		pqxx::transaction<pqxx::repeatable_read> transaction { db };
 		transaction.exec(UpdateWorkerLastActive.data(), pqxx::params { worker_id });
 		transaction.commit();
 	} catch (std::exception & e) {
