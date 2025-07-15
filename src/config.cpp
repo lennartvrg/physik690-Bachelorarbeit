@@ -27,6 +27,9 @@ Config Config::from_file(const std::string_view path) {
 	const auto temperature_steps = config["temperature"]["steps"].value_or<int32_t>(64);
 	const auto max_depth = config["temperature"]["max_depth"].value_or<double_t>(1);
 
+	const auto engine = static_cast<StorageEngine>(config["storage"]["engine"].value_or<int32_t>(1));
+	const auto connection_string = config["storage"]["connection_string"].value_or<std::string>("output/data.db");
+
 	std::unordered_set<std::size_t> vortex_sizes {};
 	config["vortices"]["sizes"].as_array()->for_each([&] <typename T>(T && el) {
 		if constexpr (toml::is_integer<T>) {
@@ -38,5 +41,5 @@ Config Config::from_file(const std::string_view path) {
 	if (const auto node = config["metropolis"]) algorithms.emplace(algorithms::METROPOLIS, parse_algorithm_config(node));
 	if (const auto node = config["wolff"]) algorithms.emplace(algorithms::WOLFF, parse_algorithm_config(node));
 
-	return Config { simulation_id, bootstrap_resamples, max_temperature, temperature_steps, max_depth, vortex_sizes, algorithms };
+	return Config { engine, connection_string, simulation_id, bootstrap_resamples, max_temperature, temperature_steps, max_depth, vortex_sizes, algorithms };
 }

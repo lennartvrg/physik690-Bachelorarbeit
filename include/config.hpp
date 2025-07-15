@@ -7,6 +7,11 @@
 
 #include "algorithms/algorithms.hpp"
 
+enum StorageEngine {
+	SQLiteEngine = 1,
+	PostgreSQLEngine = 2
+};
+
 struct AlgorithmConfig {
 	const std::size_t num_chunks;
 	const std::size_t sweeps_per_chunk;
@@ -15,6 +20,9 @@ struct AlgorithmConfig {
 
 struct Config {
 	static Config from_file(std::string_view path);
+
+	const StorageEngine engine;
+	const std::string connection_string;
 
 	const int32_t simulation_id;
 	const std::size_t bootstrap_resamples;

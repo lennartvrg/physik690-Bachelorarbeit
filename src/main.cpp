@@ -29,10 +29,15 @@ int run(const Config & config, std::string_view connection_string) {
 int main() {
     try {
         const auto config = Config::from_file("config.toml");
-        std::filesystem::create_directories("output");
+        if (config.engine == PostgreSQLEngine) {
+            return run<PostgresStorage>(config, config.connection_string);
+        }
 
-        //return run<SQLiteStorage>(config, "output/data.db");
-        return run<PostgresStorage>(config, "postgres://postgres:postgres@10.4.0.129:5432/Bachelor");
+        std::filesystem::path fullpath { config.connection_string };
+        const auto path_without_filename = fullpath.remove_filename();
+
+        std::filesystem::create_directories(path_without_filename);
+        return run<SQLiteStorage>(config, config.connection_string);
     } catch (const std::exception & e) {
         std::cerr << e.what() << std::endl;
         return -1;
