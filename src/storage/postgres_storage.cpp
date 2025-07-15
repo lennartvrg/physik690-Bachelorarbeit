@@ -480,34 +480,38 @@ RETURNING selected.*
 )~~~~~~";
 
 std::optional<Chunk> PostgresStorage::next_chunk(const int simulation_id) {
-	try {
-		pqxx::transaction<pqxx::repeatable_read> transaction { db };
-		const auto configuration_id_opt = transaction.query01<int, int, int, int, double_t, int, std::optional<std::basic_string<std::byte>>>(NextChunkQuery.data(), {
-			simulation_id, worker_id
-		});
-		transaction.commit();
+	while (true) {
+		try {
+			pqxx::transaction<pqxx::repeatable_read> transaction { db };
+			const auto configuration_id_opt = transaction.query01<int, int, int, int, double_t, int, std::optional<std::basic_string<std::byte>>>(NextChunkQuery.data(), {
+				simulation_id, worker_id
+			});
+			transaction.commit();
 
-		if (!configuration_id_opt.has_value()) return std::nullopt;
-		const auto [configuration_id, index, algorithm, lattice_size, temperature, sweeps_per_chunk, spins_opt] = *configuration_id_opt;
+			if (!configuration_id_opt.has_value()) return std::nullopt;
+			const auto [configuration_id, index, algorithm, lattice_size, temperature, sweeps_per_chunk, spins_opt] = *configuration_id_opt;
 
-		std::optional<std::vector<double_t>> spins = std::nullopt;
-		if (const auto data = spins_opt) {
-			spins = schemas::deserialize(data->data());
+			std::optional<std::vector<double_t>> spins = std::nullopt;
+			if (const auto data = spins_opt) {
+				spins = schemas::deserialize(data->data());
+			}
+
+			return std::optional<Chunk>({
+				configuration_id,
+				index,
+				static_cast<algorithms::Algorithm>(algorithm),
+				static_cast<std::size_t>(lattice_size),
+				temperature,
+				static_cast<std::size_t>(sweeps_per_chunk),
+				spins
+			});
+
+		} catch (const pqxx::serialization_failure &) {
+			std::cout << "[PostgreSQL] Conflict while fetching next chunk. Trying again..." << std::endl;
+		} catch (const pqxx::sql_error & e) {
+			std::cout << "[PostgreSQL] Failed to fetch next chunk. PostgreSQL exception: " << e.what() << std::endl;
+			std::rethrow_exception(std::current_exception());
 		}
-
-		return std::optional<Chunk>({
-			configuration_id,
-			index,
-			static_cast<algorithms::Algorithm>(algorithm),
-			static_cast<std::size_t>(lattice_size),
-			temperature,
-			static_cast<std::size_t>(sweeps_per_chunk),
-			spins
-		});
-
-	} catch (const pqxx::sql_error & e) {
-		std::cout << "[PostgreSQL] Failed to fetch next chunk. PostgreSQL exception: " << e.what() << std::endl;
-		std::rethrow_exception(std::current_exception());
 	}
 }
 
@@ -588,32 +592,36 @@ ORDER BY c."index"
 )~~~~~~";
 
 std::optional<std::tuple<Estimate, std::vector<double_t>>> PostgresStorage::next_estimate(const int simulation_id) {
-	try {
-		pqxx::transaction<pqxx::repeatable_read> transaction { db };
+	while (true) {
+		try {
+			pqxx::transaction<pqxx::repeatable_read> transaction { db };
 
-		const auto estimate_opt = transaction.query01<int, std::size_t, int, int>(FetchNextEstimateQuery.data(), {
-			simulation_id, worker_id
-		});
+			const auto estimate_opt = transaction.query01<int, std::size_t, int, int>(FetchNextEstimateQuery.data(), {
+				simulation_id, worker_id
+			});
 
-		if (!estimate_opt.has_value()) {
-			return std::nullopt;
+			if (!estimate_opt.has_value()) {
+				return std::nullopt;
+			}
+			const auto [configuration_id, bootstrap_resamples, num_chunks, type] = *estimate_opt;
+
+			std::vector<double_t> values {};
+			for (const auto & [index, buffer] : transaction.query<int, std::basic_string<std::byte>>(FetchConfigurationResults.data(), { configuration_id, type })) {
+				const auto data = schemas::deserialize(buffer.data());
+
+				values.reserve(data.size() * num_chunks);
+				values.insert(values.end(), data.begin(), data.end());
+			}
+
+			transaction.commit();
+
+			return { std::make_tuple<Estimate, std::vector<double_t>>({ configuration_id, static_cast<observables::Type>(type), bootstrap_resamples }, std::move(values)) };
+		} catch (const pqxx::serialization_failure &) {
+			std::cout << "[PostgreSQL] Conflict while fetching next estimate. Trying again..." << std::endl;
+		}  catch (std::exception & e) {
+			std::cout << "[PostgreSQL] Failed to fetch next estimate. PostgreSQL exception: " << e.what() << std::endl;
+			std::rethrow_exception(std::current_exception());
 		}
-		const auto [configuration_id, bootstrap_resamples, num_chunks, type] = *estimate_opt;
-
-		std::vector<double_t> values {};
-		for (const auto & [index, buffer] : transaction.query<int, std::basic_string<std::byte>>(FetchConfigurationResults.data(), { configuration_id, type })) {
-			const auto data = schemas::deserialize(buffer.data());
-
-			values.reserve(data.size() * num_chunks);
-			values.insert(values.end(), data.begin(), data.end());
-		}
-
-		transaction.commit();
-
-		return { std::make_tuple<Estimate, std::vector<double_t>>({ configuration_id, static_cast<observables::Type>(type), bootstrap_resamples }, std::move(values)) };
-	} catch (std::exception & e) {
-		std::cout << "[PostgreSQL] Failed to fetch next estimate. PostgreSQL exception: " << e.what() << std::endl;
-		std::rethrow_exception(std::current_exception());
 	}
 }
 
@@ -658,23 +666,27 @@ RETURNING selected.*
 )~~~~~~";
 
 std::optional<NextDerivative> PostgresStorage::next_derivative(const int simulation_id) {
-	try {
-		pqxx::transaction<pqxx::repeatable_read> transaction { db };
+	while (true) {
+		try {
+			pqxx::transaction<pqxx::repeatable_read> transaction { db };
 
-		const auto derivative_opt = transaction.query01<int, int, double_t, double_t, double_t, double_t, double_t>(FetchNextDerivativeQuery.data(), {
-			simulation_id, worker_id
-		});
+			const auto derivative_opt = transaction.query01<int, int, double_t, double_t, double_t, double_t, double_t>(FetchNextDerivativeQuery.data(), {
+				simulation_id, worker_id
+			});
 
-		transaction.commit();
-		if (!derivative_opt.has_value()) {
-			return std::nullopt;
+			transaction.commit();
+			if (!derivative_opt.has_value()) {
+				return std::nullopt;
+			}
+
+			const auto [ configuration_id, type, temperature, mean, std_dev, square_mean, square_std_dev ] = derivative_opt.value();
+			return { { configuration_id, static_cast<observables::Type>(type), temperature, mean, std_dev, square_mean, square_std_dev } };
+		}  catch (const pqxx::serialization_failure &) {
+			std::cout << "[PostgreSQL] Conflict while fetching next derivative. Trying again..." << std::endl;
+		}  catch (const std::exception & e) {
+			std::cout << "[PostgreSQL] Failed to fetch next derivative. PostgreSQL exception: " << e.what() << std::endl;
+			std::rethrow_exception(std::current_exception());
 		}
-
-		const auto [ configuration_id, type, temperature, mean, std_dev, square_mean, square_std_dev ] = derivative_opt.value();
-		return { { configuration_id, static_cast<observables::Type>(type), temperature, mean, std_dev, square_mean, square_std_dev } };
-	} catch (const std::exception & e) {
-		std::cout << "[PostgreSQL] Failed to fetch next derivative. PostgreSQL exception: " << e.what() << std::endl;
-		std::rethrow_exception(std::current_exception());
 	}
 }
 
