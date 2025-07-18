@@ -1,6 +1,6 @@
 [simulation]
 identifier = 0
-bootstrap_resamples = 20000
+bootstrap_resamples = 2000
 
 [storage]
 engine = 2 # 1 is SQLite and 2 is PostgreSQL
@@ -9,7 +9,7 @@ connection_string = "postgres://postgres:postgres@10.4.0.129:5432/Bachelor"
 [temperature]
 max = 3.0
 steps = 48
-max_depth = 1
+max_depth = 2
 
 [vortices]
 sizes = [ 128 ]
@@ -18,12 +18,12 @@ sizes = [ 128 ]
 num_chunks = 24
 sweeps_per_chunk = 50000
 sizes = [
-    4, 8, 16, 32, 48, 56, 64, 80, 96, 112, 128
+    4, 8, 16, 32, 48, 56, 64, 80, 96, 112, 128, 144
 ]
 
 [wolff]
 num_chunks = 12
 sweeps_per_chunk = 50000
 sizes = [
-    4, 8, 16, 32, 48, 56, 64, 80, 96, 112, 128
+    4, 8, 16, 32, 48, 56, 64, 80, 96, 112, 128, 144
 ]

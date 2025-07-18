@@ -48,7 +48,9 @@
 \publishers{\LARGE
 	\begin{otherlanguage}{ngerman}
 		Bachelorarbeit in Physik\\
-		angefertigt am Helmholtz-Institut für Strahlen- und Kernphysik\\[3ex]
+		angefertigt am Institute for Advanced Simulation\\
+		des\\
+		Forschungszentrum Jülich\\[3ex]
 		vorgelegt der\\
 		Mathematisch-Naturwissenschaftlichen Fakultät\\
 		der\\
@@ -88,7 +90,8 @@
 		\tableofcontents
 		\thispagestyle{empty}
 
-	\mainmatter	
+	\mainmatter
+		\pagenumbering{arabic}
 		% Introduction
 		\input{chapters/introduction/introduction}
 		
@@ -96,6 +99,12 @@
 		\input{chapters/theory/phase_transitions}
 		\input{chapters/theory/xy_model}
 		\input{chapters/theory/numerical_methods}
+		
+		\cleardoubleemptypage
+		
+	\appendix
+		\pagenumbering{Alph}
+		\input{chapters/appendix/source_code}
 
 	\backmatter\pagenumbering{Roman}
 		\listoffigures

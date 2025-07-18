@@ -1,1 +1,28 @@
 \section{Numerical Methods}
+	\subsection{Metropolis Algorithm}
+		The overall procedure for the lattice is as follows:
+		\begin{enumerate}
+			\item Calculate $E$ and $M$ for the initial lattice configuration.
+			\item Perform a lattice sweep by iterating over all lattice sites. For every site $i$ do:
+			\begin{enumerate}
+				\item Propose a new angle $\theta_i \in [0,2\pi)$ from a uniform distribution.
+				\item Calculate $\Delta H = \Delta E$ and $\Delta M$ for the proposed new state.
+				\item Accept or reject state with probability $P = \min{(1, \exp{(-\beta\Delta H)})}$.
+			\end{enumerate}
+			\item Update the observables $E \mathrel{{+}{=}} \Delta E$ and $M \mathrel{{+}{=}} \Delta M$ and add them to the result set.
+			\item Repeat from 2. for a total of $N$ sweeps.
+		\end{enumerate}
+		
+	\subsection{Wolff Cluster Algorithm}
+		
+	
+	\subsection{Bootstrapping}
+		Since the Metropolis-Hastings algorithm scales with the number of lattice sites, it is computationally impractical to run the Metropolis-Hastings algorithm for long timescales. Given that we have an observable whose iid samples follow a Gaussian distribution and we already have \enquote{enough} iid samples which cover enough of the possible configuration space, we can then use bootstrapping to generate more samples (\citet{bootstrap}).
+		\begin{enumerate}
+			\item Collect $B$ intermediate means by repeating the following:
+			\begin{enumerate}
+				\item Take $A$ random samples from the blocked samples obtained in~\cref{sec:blocking} with replacement.
+				\item Calculate the mean of those samples and add the result to the set of intermediate means.
+			\end{enumerate}
+			\item Calculate the final mean and the sample standard deviation of those $B$ intermediate means.
+		\end{enumerate}
