@@ -1,11 +1,11 @@
 #include <algorithm>
-#include <unistd.h>
-#include <climits>
-#include <simde/x86/sse2.h>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <random>
 #include <ranges>
-#include <chrono>
+#include <thread>
+#include <simde/x86/sse2.h>
 
 #include "utils/utils.hpp"
 
@@ -47,4 +47,10 @@ std::vector<double_t> utils::square_elements(const std::span<double> & span) {
     std::vector<double> result (span.size());
     std::ranges::transform(span, result.begin(), [] (const double_t v) { return std::pow(v, 2.0); });
     return result;
+}
+
+void utils::sleep_between(const std::int32_t lower, const std::int32_t upper) {
+    std::mt19937_64 eng{std::random_device{}()};
+    std::uniform_int_distribution<> dist{lower, upper};
+    std::this_thread::sleep_for(std::chrono::milliseconds{dist(eng)});
 }

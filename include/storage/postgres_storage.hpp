@@ -27,6 +27,8 @@ public:
 
 	void worker_keep_alive() override;
 
+	void synchronize_workers() override;
+
 private:
 	int worker_id{};
 	pqxx::connection db;

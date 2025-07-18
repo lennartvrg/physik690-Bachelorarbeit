@@ -33,7 +33,7 @@ namespace tasks {
 			// Transition from hot to cold state
 			std::vector<std::tuple<double_t, std::size_t, std::vector<double_t>>> results;
 			for (const auto temperature : utils::sweep_temperature_rev(0.0, 1.0, 120)) {
-				std::cout << "[Vortices] Simulating at t " << std::fixed << std::setprecision(2) << temperature << std::endl;
+				std::cout << "[Vortices] Simulating at t " << std::fixed << std::setprecision(3) << temperature << std::endl;
 				lattice.set_beta(1.0 / temperature);
 
 				// Stay at temperature
@@ -45,8 +45,8 @@ namespace tasks {
 
 			// Wait for vortices to dissolve
 			for (const auto _ : std::views::iota(0, 2400)) {
-				algorithms::simulate(lattice, rng, 60, algorithms::METROPOLIS);
-				results.emplace_back(get<0>(results.at(results.size() - 1)), sweeps += 20, lattice.get_spins());
+				algorithms::simulate(lattice, rng, 200, algorithms::METROPOLIS);
+				results.emplace_back(get<0>(results.at(results.size() - 1)), sweeps += 200, lattice.get_spins());
 			}
 
 			return results;

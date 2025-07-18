@@ -3,6 +3,9 @@
 
 #include "utils/utils.hpp"
 #include "storage/sqlite_storage.hpp"
+
+#include <thread>
+
 #include "schemas/serialize.hpp"
 
 constexpr std::string_view SQLITE_MIGRATIONS = R"~~~~~~(
@@ -35,6 +38,7 @@ CREATE TABLE IF NOT EXISTS "workers" (
 	worker_id				INTEGER				NOT NULL,
 
 	name					TEXT				NOT NULL CHECK (length(name) > 0),
+	synchronize				INTEGER					NULL,
 	last_active_at			BIGINT				NOT NULL,
 
 	CONSTRAINT "PK.Workers_WorkerId" PRIMARY KEY (worker_id)
@@ -52,6 +56,7 @@ CREATE TABLE IF NOT EXISTS "configurations" (
 	lattice_size			INTEGER				NOT NULL CHECK (lattice_size > 0),
 	temperature				REAL				NOT NULL CHECK (temperature > 0.0),
 
+	completed_chunks		INTEGER				NOT NULL DEFAULT (0),
 	depth					INTEGER				NOT NULL,
 
 	CONSTRAINT "PK.Configurations_ConfigurationId" PRIMARY KEY (configuration_id),
@@ -128,10 +133,14 @@ BEGIN
 		SELECT "worker_id" FROM "workers" WHERE "last_active_at" < unixepoch('now', '-5 minutes')
 	);
 
+	UPDATE "vortices" SET "worker_id" = NULL WHERE "worker_id" IN (
+		SELECT "worker_id" FROM "workers" WHERE "last_active_at" < unixepoch('now', '-5 minutes')
+	);
+
 	DELETE FROM "workers" WHERE NOT EXISTS (
 		SELECT * FROM "configurations" c WHERE c."active_worker_id" = "worker_id"
 	) AND NOT EXISTS (
-		SELECT * FROM "chunks" c WHERE c."worker_id" = "worker_id"
+		SELECT * FROM "vortices" v WHERE v."worker_id" = "worker_id"
 	) AND "last_active_at" < unixepoch('now', '-5 minutes');
 END;
 
@@ -141,8 +150,6 @@ CREATE TABLE IF NOT EXISTS "chunks" (
 	configuration_id		INTEGER				NOT NULL,
 	"index"					INTEGER				NOT NULL,
 
-	worker_id				INTEGER				NOT NULL,
-
 	start_time				INTEGER				NOT NULL,
 	end_time				INTEGER				NOT NULL CHECK (end_time >= start_time),
 	time					INTEGER				GENERATED ALWAYS AS (end_time - start_time),
@@ -150,8 +157,7 @@ CREATE TABLE IF NOT EXISTS "chunks" (
 	spins					BLOB				NOT NULL,
 
 	CONSTRAINT "PK.Chunks_ChunkId" PRIMARY KEY (chunk_id),
-	CONSTRAINT "FK.Chunks_ConfigurationId" FOREIGN KEY (configuration_id) REFERENCES "configurations" (configuration_id),
-	CONSTRAINT "FK.Chunks_WorkerId" FOREIGN KEY (worker_id) REFERENCES "workers" (worker_id)
+	CONSTRAINT "FK.Chunks_ConfigurationId" FOREIGN KEY (configuration_id) REFERENCES "configurations" (configuration_id)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS "IX.Chunks_ConfigurationId_Index" ON "chunks" ("configuration_id", "index");
@@ -200,6 +206,12 @@ BEGIN
 		SELECT "configuration_id" FROM "configurations" WHERE "simulation_id" = NEW."simulation_id"
 	);
 END;
+
+CREATE TRIGGER IF NOT EXISTS "TRG.OnInsertedChunk"
+BEFORE INSERT ON "chunks" FOR EACH ROW
+BEGIN
+	UPDATE configurations SET completed_chunks = NEW."index" WHERE configuration_id = NEW.configuration_id;
+END;
 )~~~~~~";
 
 constexpr std::string_view RegisterWorkerQuery = R"~~~~~~(
@@ -208,7 +220,7 @@ INSERT INTO "workers" (name, last_active_at) VALUES (@name, unixepoch('now')) RE
 
 SQLiteStorage::SQLiteStorage(const std::string_view & path) : worker_id(-1), db(path, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE | SQLite::OPEN_NOMUTEX) {
 	try {
-		db.setBusyTimeout(10000);
+		db.setBusyTimeout(30000);
 		db.exec("PRAGMA foreign_keys = ON");
 		db.exec("PRAGMA synchronous = NORMAL");
 
@@ -230,7 +242,7 @@ SQLiteStorage::SQLiteStorage(const std::string_view & path) : worker_id(-1), db(
 }
 
 constexpr std::string_view InsertSimulationQuery = R"~~~~~~(
-INSERT INTO "simulations" (simulation_id, bootstrap_resamples, created_at) VALUES (@simulation_id, @bootstrap_resamples, @created_at)
+INSERT INTO "simulations" (simulation_id, bootstrap_resamples, created_at) VALUES (@simulation_id, @bootstrap_resamples, unixepoch('now'))
 ON CONFLICT DO UPDATE SET bootstrap_resamples = @bootstrap_resamples
 )~~~~~~";
 
@@ -294,7 +306,6 @@ bool SQLiteStorage::prepare_simulation(const Config config) {
 		SQLite::Statement simulation { db, InsertSimulationQuery.data() };
 		simulation.bind("@simulation_id", config.simulation_id);
 		simulation.bind("@bootstrap_resamples", static_cast<int>(config.bootstrap_resamples));
-		simulation.bind("@created_at", utils::timestamp_ms());
 		simulation.exec();
 
 		SQLite::Statement vortex { db, InsertVorticesQuery.data() };
@@ -536,7 +547,7 @@ std::optional<Chunk> SQLiteStorage::next_chunk(const int simulation_id) {
 }
 
 constexpr std::string_view InsertChunkQuery = R"~~~~~~(
-INSERT INTO "chunks" (configuration_id, "index", start_time, end_time, worker_id, spins) VALUES (@configuration_id, @index, @start_time, @end_time, @worker_id, @spins) RETURNING chunk_id
+INSERT INTO "chunks" (configuration_id, "index", start_time, end_time, spins) VALUES (@configuration_id, @index, @start_time, @end_time, @spins) RETURNING chunk_id
 )~~~~~~";
 
 constexpr std::string_view InsertAutocorrelationQuery = R"~~~~~~(
@@ -560,7 +571,6 @@ void SQLiteStorage::save_chunk(const Chunk & chunk, const int64_t start_time, co
 		chunk_stmt.bind("@index", chunk.index);
 		chunk_stmt.bind("@start_time", start_time);
 		chunk_stmt.bind("@end_time", end_time);
-		chunk_stmt.bind("@worker_id", worker_id);
 		chunk_stmt.bind("@spins", spins.data(), static_cast<int>(spins.size()));
 
 		auto chunk_id = -1;
@@ -608,7 +618,7 @@ INNER JOIN "metadata" m ON c.metadata_id = m.metadata_id
 INNER JOIN "chunks" ch ON c.configuration_id = ch.configuration_id AND ch."index" = m.num_chunks
 CROSS JOIN "types" t ON t.type_id BETWEEN 0 AND 3 OR t.type_id = 6 OR (t.type_id = 8 AND m.algorithm = 1)
 LEFT JOIN "estimates" e ON e.configuration_id = c.configuration_id AND e.type_id = t.type_id
-WHERE s.simulation_id = @simulation_id AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
+WHERE s.simulation_id = @simulation_id AND c.completed_chunks = m.num_chunks AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
 	SELECT "worker_id" FROM "workers" WHERE "last_active_at" < unixepoch('now', '-5 minutes')
 )) AND e.type_id IS NULL
 LIMIT 1
@@ -745,6 +755,68 @@ void SQLiteStorage::worker_keep_alive() {
 		worker.exec();
 
 		transaction.commit();
+	} catch (std::exception & e) {
+		std::cout << "[SQLite] Failed to send worker keep alive. SQLite exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
+}
+
+constexpr std::string_view SetWorkerSynchronizeFlag = R"~~~~~~(
+UPDATE "workers" SET "synchronize" = @synchronize WHERE "worker_id" = @worker_id
+)~~~~~~";
+
+constexpr std::string_view FetchWorkerSynchronizeFlag = R"~~~~~~(
+SELECT "synchronize" FROM "workers" WHERE "worker_id" = @worker_id
+)~~~~~~";
+
+constexpr std::string_view CountActiveWorkerNotWaitingForSynchronization = R"~~~~~~(
+SELECT COUNT(*) FROM "workers" WHERE "last_active_at" >= unixepoch('now', '-5 minutes') AND "synchronize" IS NULL
+)~~~~~~";
+
+constexpr std::string_view ResetWaitingFlag = R"~~~~~~(
+UPDATE "workers" SET "synchronize" = NULL WHERE "last_active_at" >= unixepoch('now', '-5 minutes')
+)~~~~~~";
+
+void SQLiteStorage::synchronize_workers() {
+	try {
+		SQLite::Transaction init { db, SQLite::TransactionBehavior::IMMEDIATE };
+
+		SQLite::Statement worker { db, SetWorkerSynchronizeFlag.data() };
+		worker.bind("@worker_id", worker_id);
+		worker.bind("@synchronize", 1);
+		worker.exec();
+
+		init.commit();
+	} catch (std::exception & e) {
+		std::cout << "[SQLite] Failed to set worker waiting for synchronization. SQLite exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
+
+	try {
+		while (true) {
+			std::this_thread::sleep_for(std::chrono::seconds(5));
+
+			SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
+
+			SQLite::Statement synchronize_stmt { db, FetchWorkerSynchronizeFlag.data() };
+			synchronize_stmt.bind("@worker_id", worker_id);
+
+			if (synchronize_stmt.executeStep() && synchronize_stmt.getColumn(0).isNull()) {
+				break;
+			}
+
+			SQLite::Statement not_waiting_stmt { db, CountActiveWorkerNotWaitingForSynchronization.data() };
+			if (not_waiting_stmt.executeStep() && not_waiting_stmt.getColumn(0).getInt() == 0) {
+				SQLite::Statement reset_stmt { db, ResetWaitingFlag.data() };
+				reset_stmt.exec();
+			}
+
+			SQLite::Statement worker_stmt { db, UpdateWorkerLastActive.data() };
+			worker_stmt.bind("@worker_id", worker_id);
+			worker_stmt.exec();
+
+			transaction.commit();
+		}
 	} catch (std::exception & e) {
 		std::cout << "[SQLite] Failed to send worker keep alive. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());

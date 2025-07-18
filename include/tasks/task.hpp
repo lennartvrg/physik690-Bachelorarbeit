@@ -26,6 +26,10 @@ namespace tasks {
 		}
 
 		void execute() {
+			// Staggered start
+			std::cout << "[Task] Staggering the start..." << std::endl;
+			utils::sleep_between(0, 3000);
+
 			// Keeping track of worker threads
 			std::vector<std::thread> workers;
 			std::unique_lock lock_tasks { available_tasks_mutex };

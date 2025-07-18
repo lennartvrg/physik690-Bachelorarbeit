@@ -1,6 +1,6 @@
 [simulation]
 identifier = 0
-bootstrap_resamples = 2000
+bootstrap_resamples = 10000
 
 [storage]
 engine = 2 # 1 is SQLite and 2 is PostgreSQL
@@ -12,18 +12,18 @@ steps = 48
 max_depth = 2
 
 [vortices]
-sizes = [ 128 ]
+sizes = []
 
 [metropolis]
 num_chunks = 24
 sweeps_per_chunk = 50000
 sizes = [
-    4, 8, 16, 32, 48, 56, 64, 80, 96, 112, 128, 144
+    4, 8, 16, 32, 48, 64, 80, 96
 ]
 
 [wolff]
 num_chunks = 12
 sweeps_per_chunk = 50000
 sizes = [
-    4, 8, 16, 32, 48, 56, 64, 80, 96, 112, 128, 144
+    4, 8, 16, 32, 48, 64, 80, 96
 ]

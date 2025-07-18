@@ -4,7 +4,7 @@
 
 #include "algorithms/wolff.hpp"
 
-std::tuple<double_t, double_t, std::tuple<double_t, double_t>, int32_t> algorithms::wolff(Lattice & lattice, XoshiroCpp::Xoshiro256Plus & rng) noexcept {
+std::tuple<double_t, double_t, std::tuple<double_t, double_t>, std::int32_t, std::size_t> algorithms::wolff(Lattice & lattice, XoshiroCpp::Xoshiro256Plus & rng) noexcept {
     // Prepares the result objects containing the total change of energy and magnetization
     auto chg_energy = 0.0, chg_helicity_modulus = 0.0, chg_magnet_cos = 0.0, chg_magnet_sin = 0.0;
     std::uniform_int_distribution<std::size_t> sites {0, lattice.num_sites() - 1 };
@@ -64,5 +64,5 @@ std::tuple<double_t, double_t, std::tuple<double_t, double_t>, int32_t> algorith
         }
     }
 
-    return {chg_energy, chg_helicity_modulus, {chg_magnet_cos, chg_magnet_sin}, cluster_size};
+    return {chg_energy, chg_helicity_modulus, {chg_magnet_cos, chg_magnet_sin}, cluster_size, visited.size()};
 }

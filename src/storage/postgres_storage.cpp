@@ -37,7 +37,9 @@ CREATE TABLE IF NOT EXISTS "workers" (
 	worker_id				INTEGER				NOT NULL GENERATED ALWAYS AS IDENTITY,
 
 	name					TEXT				NOT NULL CHECK (length(name) > 0),
+	synchronize				BOOLEAN					NULL,
 	last_active_at			BIGINT				NOT NULL,
+
 
 	CONSTRAINT "PK.Workers_WorkerId" PRIMARY KEY (worker_id)
 );
@@ -130,10 +132,14 @@ BEGIN
 		SELECT "worker_id" FROM "workers" WHERE "last_active_at" < CAST(extract(epoch FROM now() - INTERVAL '5 minutes') AS int)
 	);
 
+	UPDATE "vortices" SET "worker_id" = NULL WHERE "worker_id" IN (
+		SELECT "worker_id" FROM "workers" WHERE "last_active_at" < CAST(extract(epoch FROM now() - INTERVAL '5 minutes') AS int)
+	);
+
 	DELETE FROM "workers" WHERE NOT EXISTS (
 		SELECT * FROM "configurations" c WHERE c."active_worker_id" = "worker_id"
 	) AND NOT EXISTS (
-		SELECT * FROM "chunks" c WHERE c."worker_id" = "worker_id"
+		SELECT * FROM "vortices" v WHERE v."worker_id" = "worker_id"
 	) AND "last_active_at" < CAST(extract(epoch FROM now() - INTERVAL '5 minutes') AS int);
 	RETURN NEW;
 END;
@@ -149,8 +155,6 @@ CREATE TABLE IF NOT EXISTS "chunks" (
 	configuration_id		INTEGER				NOT NULL,
 	"index"					INTEGER				NOT NULL,
 
-	worker_id				INTEGER				NOT NULL,
-
 	start_time				BIGINT				NOT NULL,
 	end_time				BIGINT				NOT NULL CHECK (end_time >= start_time),
 	time					BIGINT				GENERATED ALWAYS AS (end_time - start_time) STORED,
@@ -158,8 +162,7 @@ CREATE TABLE IF NOT EXISTS "chunks" (
 	spins					BYTEA				NOT NULL,
 
 	CONSTRAINT "PK.Chunks_ChunkId" PRIMARY KEY (chunk_id),
-	CONSTRAINT "FK.Chunks_ConfigurationId" FOREIGN KEY (configuration_id) REFERENCES "configurations" (configuration_id),
-	CONSTRAINT "FK.Chunks_WorkerId" FOREIGN KEY (worker_id) REFERENCES "workers" (worker_id)
+	CONSTRAINT "FK.Chunks_ConfigurationId" FOREIGN KEY (configuration_id) REFERENCES "configurations" (configuration_id)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS "IX.Chunks_ConfigurationId_Index" ON "chunks" ("configuration_id", "index");
@@ -258,7 +261,7 @@ PostgresStorage::PostgresStorage(const std::string_view & connection_string) : w
 }
 
 constexpr std::string_view InsertSimulationQuery = R"~~~~~~(
-INSERT INTO "simulations" (simulation_id, bootstrap_resamples, created_at) VALUES ($1, $2, $3)
+INSERT INTO "simulations" (simulation_id, bootstrap_resamples, created_at) VALUES ($1, $2, CAST(extract(epoch FROM now()) AS int))
 ON CONFLICT (simulation_id) DO UPDATE SET bootstrap_resamples = $2
 )~~~~~~";
 
@@ -316,90 +319,94 @@ LIMIT 1;
 )~~~~~~";
 
 bool PostgresStorage::prepare_simulation(const Config config) {
-	try {
-		pqxx::transaction<pqxx::repeatable_read> transaction { db };
+	while (true) {
+		try {
+			pqxx::transaction<pqxx::repeatable_read> transaction { db };
 
-		transaction.exec(InsertSimulationQuery.data(), {
-			config.simulation_id,
-			config.bootstrap_resamples,
-			utils::timestamp_ms()
-		});
-
-		db.prepare("vortex", InsertVorticesQuery.data());
-		for (const auto size : config.vortex_sizes) {
-			transaction.exec(pqxx::prepped { "vortex" }, { config.simulation_id, size });
-		}
-
-		db.prepare("insert_metadata", InsertMetadataQuery.data());
-		db.prepare("insert_configurations", InsertConfigurationsQuery.data());
-
-		for (const auto & [key, value] : config.algorithms) {
-			transaction.exec(pqxx::prepped { "insert_metadata" }, {
-				config.simulation_id, static_cast<int>(key), value.num_chunks, value.sweeps_per_chunk,
+			transaction.exec(InsertSimulationQuery.data(), {
+				config.simulation_id,
+				config.bootstrap_resamples
 			});
 
-			const auto [metadata_id] = transaction.query1<int>(FetchMetadataQuery.data(), {
-				config.simulation_id, static_cast<int>(key)
-			});
-
-			for (const auto size : value.sizes) {
-				for (const auto temperature : utils::sweep_temperature(0.0, config.max_temperature, config.temperature_steps)) {
-					transaction.exec(pqxx::prepped { "insert_configurations" }, {
-						config.simulation_id, metadata_id, size, temperature, 1
-					});
-				}
+			db.prepare("vortex", InsertVorticesQuery.data());
+			for (const auto size : config.vortex_sizes) {
+				transaction.exec(pqxx::prepped { "vortex" }, { config.simulation_id, size });
 			}
-		}
 
-		// Check if all registered configurations are completely done
-		if (get<0>(transaction.query1<int>(FetchAllWorkDoneQuery.data(), { config.simulation_id })) == 0) {
+			db.prepare("insert_metadata", InsertMetadataQuery.data());
+			db.prepare("insert_configurations", InsertConfigurationsQuery.data());
+
 			for (const auto & [key, value] : config.algorithms) {
-				// Find metadata row associated with algorithm
+				transaction.exec(pqxx::prepped { "insert_metadata" }, {
+					config.simulation_id, static_cast<int>(key), value.num_chunks, value.sweeps_per_chunk,
+				});
+
 				const auto [metadata_id] = transaction.query1<int>(FetchMetadataQuery.data(), {
 					config.simulation_id, static_cast<int>(key)
 				});
 
-				// Iterate over sizes
 				for (const auto size : value.sizes) {
-					// Check depth not yet reached
-					if (const auto [depth] = transaction.query1<int>(FetchMaxDepthQuery.data(), { config.simulation_id, metadata_id, size }); depth < config.max_depth) {
-						// Fetch the Xs peak by the temperature where it occurred and the space to neighboring data points
-						const auto pair = transaction.query01<double_t, double_t>(FetchPeakMagneticSusceptibilityQuery.data(), {
-							config.simulation_id, metadata_id, static_cast<int>(size)
+					for (const auto temperature : utils::sweep_temperature(0.0, config.max_temperature, config.temperature_steps)) {
+						transaction.exec(pqxx::prepped { "insert_configurations" }, {
+							config.simulation_id, metadata_id, size, temperature, 1
 						});
+					}
+				}
+			}
 
-						if (pair.has_value()) {
-							// Extract temperature where xs is max and step size
-							const auto [xs_temperature, diff] = *pair;
+			// Check if all registered configurations are completely done
+			if (get<0>(transaction.query1<int>(FetchAllWorkDoneQuery.data(), { config.simulation_id })) == 0) {
+				for (const auto & [key, value] : config.algorithms) {
+					// Find metadata row associated with algorithm
+					const auto [metadata_id] = transaction.query1<int>(FetchMetadataQuery.data(), {
+						config.simulation_id, static_cast<int>(key)
+					});
 
-							// Determine new bounds around the temperature where xs is max
-							const auto min_temperature = xs_temperature - 2 * diff;
-							const auto max_temperature = xs_temperature + 2 * diff;
+					// Iterate over sizes
+					for (const auto size : value.sizes) {
+						// Check depth not yet reached
+						if (const auto [depth] = transaction.query1<int>(FetchMaxDepthQuery.data(), { config.simulation_id, metadata_id, size }); depth < config.max_depth) {
+							// Fetch the Xs peak by the temperature where it occurred and the space to neighboring data points
+							const auto pair = transaction.query01<double_t, double_t>(FetchPeakMagneticSusceptibilityQuery.data(), {
+								config.simulation_id, metadata_id, static_cast<int>(size)
+							});
 
-							// Add configurations
-							for (const auto temperature : utils::sweep_temperature(min_temperature, max_temperature, config.temperature_steps, false)) {
-								transaction.exec(pqxx::prepped { "insert_configurations" }, {
-									config.simulation_id, metadata_id, size, temperature, depth + 1
-								});
+							if (pair.has_value()) {
+								// Extract temperature where xs is max and step size
+								const auto [xs_temperature, diff] = *pair;
+
+								// Determine new bounds around the temperature where xs is max
+								const auto min_temperature = xs_temperature - 2 * diff;
+								const auto max_temperature = xs_temperature + 2 * diff;
+
+								// Add configurations
+								for (const auto temperature : utils::sweep_temperature(min_temperature, max_temperature, config.temperature_steps, false)) {
+									transaction.exec(pqxx::prepped { "insert_configurations" }, {
+										config.simulation_id, metadata_id, size, temperature, depth + 1
+									});
+								}
+
 							}
-
 						}
 					}
 				}
 			}
+
+			db.unprepare("vortex");
+			db.unprepare("insert_metadata");
+			db.unprepare("insert_configurations");
+
+			const bool work = get<0>(transaction.query1<int>(FetchAllWorkDoneQuery.data(), { config.simulation_id })) != 0;
+			transaction.commit();
+
+			return work;
+		} catch (const pqxx::serialization_failure &) {
+			std::cout << "[PostgreSQL] Conflict while fetching next estimate. Trying again..." << std::endl;
+			utils::sleep_between(1000, 3000);
+		} catch (std::exception & e) {
+			std::cout << "[PostgreSQL] Failed to prepare simulation. PostgreSQL exception: " << e.what() << std::endl;
+			std::rethrow_exception(std::current_exception());
 		}
-
-		db.unprepare("vortex");
-		db.unprepare("insert_metadata");
-		db.unprepare("insert_configurations");
-
-		const bool work = get<0>(transaction.query1<int>(FetchAllWorkDoneQuery.data(), { config.simulation_id })) != 0;
-		transaction.commit();
-
-		return work;
-	} catch (std::exception & e) {
-		std::cout << "[PostgreSQL] Failed to prepare simulation. PostgreSQL exception: " << e.what() << std::endl;
-		std::rethrow_exception(std::current_exception());
 	}
 }
 
@@ -417,23 +424,28 @@ RETURNING selected.*;
 )~~~~~~";
 
 std::optional<std::tuple<std::size_t, std::size_t>> PostgresStorage::next_vortex(const int simulation_id) {
-	try {
-		pqxx::transaction<pqxx::repeatable_read> transaction { db };
+	while (true) {
+		try {
+			pqxx::transaction<pqxx::repeatable_read> transaction { db };
 
-		const auto pair = transaction.query01<int, int>(NextVortexQuery.data(), {
-			simulation_id, worker_id
-		});
+			const auto pair = transaction.query01<int, int>(NextVortexQuery.data(), {
+				simulation_id, worker_id
+			});
 
-		transaction.commit();
-		if (!pair.has_value()) {
-			return std::nullopt;
+			transaction.commit();
+			if (!pair.has_value()) {
+				return std::nullopt;
+			}
+
+			const auto [vortex_id, lattice_size] = *pair;
+			return {{ static_cast<std::size_t>(vortex_id), static_cast<std::size_t>(lattice_size) }};
+		} catch (const pqxx::serialization_failure &) {
+			std::cout << "[PostgreSQL] Conflict while fetching next estimate. Trying again..." << std::endl;
+			utils::sleep_between(1000, 3000);
+		} catch (std::exception & e) {
+			std::cout << "[PostgreSQL] Failed to fetch next vortex. PostgreSQL exception: " << e.what() << std::endl;
+			std::rethrow_exception(std::current_exception());
 		}
-
-		const auto [vortex_id, lattice_size] = *pair;
-		return {{ static_cast<std::size_t>(vortex_id), static_cast<std::size_t>(lattice_size) }};
-	} catch (std::exception & e) {
-		std::cout << "[PostgreSQL] Failed to fetch next vortex. PostgreSQL exception: " << e.what() << std::endl;
-		std::rethrow_exception(std::current_exception());
 	}
 }
 
@@ -443,7 +455,7 @@ INSERT INTO "vortex_results" (vortex_id, sweeps, temperature, spins) VALUES ($1,
 
 void PostgresStorage::save_vortices(const std::size_t vortex_id, std::vector<std::tuple<double_t, std::size_t, std::vector<double_t>>> results) {
 	try {
-		pqxx::transaction<pqxx::repeatable_read> transaction { db };
+		pqxx::work transaction { db };
 
 		db.prepare("insert_vortex", InsertVortexResultsQuery.data());
 		for (const auto & [temperature, sweeps, spins] : results) {
@@ -507,7 +519,8 @@ std::optional<Chunk> PostgresStorage::next_chunk(const int simulation_id) {
 			});
 
 		} catch (const pqxx::serialization_failure &) {
-			std::cout << "[PostgreSQL] Conflict while fetching next chunk. Trying again..." << std::endl;
+			std::cout << "[PostgreSQL] Conflict while fetching next estimate. Trying again..." << std::endl;
+			utils::sleep_between(1000, 3000);
 		} catch (const pqxx::sql_error & e) {
 			std::cout << "[PostgreSQL] Failed to fetch next chunk. PostgreSQL exception: " << e.what() << std::endl;
 			std::rethrow_exception(std::current_exception());
@@ -516,7 +529,7 @@ std::optional<Chunk> PostgresStorage::next_chunk(const int simulation_id) {
 }
 
 constexpr std::string_view InsertChunkQuery = R"~~~~~~(
-INSERT INTO "chunks" (configuration_id, "index", start_time, end_time, worker_id, spins) VALUES ($1, $2, $3, $4, $5, $6) RETURNING chunk_id
+INSERT INTO "chunks" (configuration_id, "index", start_time, end_time, spins) VALUES ($1, $2, $3, $4, $5) RETURNING chunk_id
 )~~~~~~";
 
 constexpr std::string_view InsertAutocorrelationQuery = R"~~~~~~(
@@ -533,10 +546,10 @@ UPDATE "configurations" SET active_worker_id = NULL WHERE "configuration_id" = $
 
 void PostgresStorage::save_chunk(const Chunk & chunk, const int64_t start_time, const int64_t end_time, const std::span<const uint8_t> & spins, const std::map<observables::Type, std::tuple<double_t, std::vector<uint8_t>, std::optional<std::vector<uint8_t>>>> & results) {
 	try {
-		pqxx::transaction<pqxx::repeatable_read> transaction { db };
+		pqxx::work transaction { db };
 
 		const auto [chunk_id] = transaction.query1<int>(InsertChunkQuery.data(), {
-			chunk.configuration_id, chunk.index, start_time, end_time, worker_id, pqxx::binary_cast(spins.data(), spins.size())
+			chunk.configuration_id, chunk.index, start_time, end_time, pqxx::binary_cast(spins.data(), spins.size())
 		});
 
 		db.prepare("result", InsertResultQuery.data());
@@ -573,7 +586,7 @@ WITH selected AS (
 	INNER JOIN "chunks" ch ON c.configuration_id = ch.configuration_id AND ch."index" = m.num_chunks
 	CROSS JOIN "types" t
 	LEFT JOIN "estimates" e ON e.configuration_id = c.configuration_id AND e.type_id = t.type_id
-	WHERE s.simulation_id = $1 AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
+	WHERE s.simulation_id = $1 AND c.completed_chunks = m.num_chunks AND (c.active_worker_id IS NULL OR c.active_worker_id IN (
 		SELECT "worker_id" FROM "workers" WHERE "last_active_at" < CAST(extract(epoch FROM now() - INTERVAL '5 minutes') AS int)
 	)) AND e.type_id IS NULL AND (t.type_id BETWEEN 0 AND 3 OR t.type_id = 6 OR (t.type_id = 8 AND m.algorithm = 1))
 	LIMIT 1 FOR UPDATE OF s, c, m, ch
@@ -603,21 +616,26 @@ std::optional<std::tuple<Estimate, std::vector<double_t>>> PostgresStorage::next
 			if (!estimate_opt.has_value()) {
 				return std::nullopt;
 			}
+
 			const auto [configuration_id, bootstrap_resamples, num_chunks, type] = *estimate_opt;
+			transaction.commit();
+
+			pqxx::work work { db };
 
 			std::vector<double_t> values {};
-			for (const auto & [index, buffer] : transaction.query<int, std::basic_string<std::byte>>(FetchConfigurationResults.data(), { configuration_id, type })) {
+			for (const auto & [index, buffer] : work.query<int, std::basic_string<std::byte>>(FetchConfigurationResults.data(), { configuration_id, type })) {
 				const auto data = schemas::deserialize(buffer.data());
 
 				values.reserve(data.size() * num_chunks);
 				values.insert(values.end(), data.begin(), data.end());
 			}
 
-			transaction.commit();
+			work.commit();
 
 			return { std::make_tuple<Estimate, std::vector<double_t>>({ configuration_id, static_cast<observables::Type>(type), bootstrap_resamples }, std::move(values)) };
 		} catch (const pqxx::serialization_failure &) {
 			std::cout << "[PostgreSQL] Conflict while fetching next estimate. Trying again..." << std::endl;
+			utils::sleep_between(1000, 3000);
 		}  catch (std::exception & e) {
 			std::cout << "[PostgreSQL] Failed to fetch next estimate. PostgreSQL exception: " << e.what() << std::endl;
 			std::rethrow_exception(std::current_exception());
@@ -631,7 +649,7 @@ INSERT INTO "estimates" (configuration_id, type_id, start_time, end_time, mean, 
 
 void PostgresStorage::save_estimate(const int configuration_id, const int64_t start_time, const int64_t end_time, const observables::Type type, const double_t mean, const double_t std_dev) {
 	try {
-		pqxx::transaction<pqxx::repeatable_read> transaction { db };
+		pqxx::work transaction { db };
 
 		transaction.exec(InsertEstimateQuery.data(), {
 			configuration_id, static_cast<int>(type), start_time, end_time, mean, std_dev
@@ -682,7 +700,8 @@ std::optional<NextDerivative> PostgresStorage::next_derivative(const int simulat
 			const auto [ configuration_id, type, temperature, mean, std_dev, square_mean, square_std_dev ] = derivative_opt.value();
 			return { { configuration_id, static_cast<observables::Type>(type), temperature, mean, std_dev, square_mean, square_std_dev } };
 		}  catch (const pqxx::serialization_failure &) {
-			std::cout << "[PostgreSQL] Conflict while fetching next derivative. Trying again..." << std::endl;
+			std::cout << "[PostgreSQL] Conflict while fetching next estimate. Trying again..." << std::endl;
+			utils::sleep_between(1000, 3000);
 		}  catch (const std::exception & e) {
 			std::cout << "[PostgreSQL] Failed to fetch next derivative. PostgreSQL exception: " << e.what() << std::endl;
 			std::rethrow_exception(std::current_exception());
@@ -696,11 +715,62 @@ UPDATE "workers" SET "last_active_at" = CAST(extract(epoch FROM now()) AS int) W
 
 void PostgresStorage::worker_keep_alive() {
 	try {
-		pqxx::transaction<pqxx::repeatable_read> transaction { db };
+		pqxx::work transaction { db };
 		transaction.exec(UpdateWorkerLastActive.data(), pqxx::params { worker_id });
 		transaction.commit();
-	} catch (std::exception & e) {
+	} catch (const std::exception & e) {
 		std::cout << "[PostgreSQL] Failed to send worker keep alive. PostgreSQL exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
+	}
+}
+
+constexpr std::string_view SetWorkerSynchronizeFlag = R"~~~~~~(
+UPDATE "workers" SET "synchronize" = $2 WHERE "worker_id" = $1
+)~~~~~~";
+
+constexpr std::string_view FetchWorkerSynchronizeFlag = R"~~~~~~(
+SELECT "synchronize" IS NULL FROM "workers" WHERE "worker_id" = $1
+)~~~~~~";
+
+constexpr std::string_view CountActiveWorkerNotWaitingForSynchronization = R"~~~~~~(
+SELECT COUNT(*) FROM "workers" WHERE "last_active_at" >= CAST(extract(epoch FROM now() - INTERVAL '5 minutes') AS int) AND "synchronize" IS NULL
+)~~~~~~";
+
+constexpr std::string_view ResetWaitingFlag = R"~~~~~~(
+UPDATE "workers" SET "synchronize" = NULL WHERE "last_active_at" >= CAST(extract(epoch FROM now() - INTERVAL '5 minutes') AS int)
+)~~~~~~";
+
+void PostgresStorage::synchronize_workers() {
+	try {
+		pqxx::work transaction { db };
+		transaction.exec(SetWorkerSynchronizeFlag.data(), pqxx::params { worker_id, true });
+		transaction.commit();
+	} catch (const std::exception & e) {
+		std::cout << "[PostgreSQL] Failed to send worker keep alive. PostgreSQL exception: " << e.what() << std::endl;
+		std::rethrow_exception(std::current_exception());
+	}
+
+	while (true) {
+		try {
+			std::this_thread::sleep_for(std::chrono::seconds(5));
+
+			pqxx::work transaction { db };
+
+			const auto [exit] = transaction.query1<bool>(FetchWorkerSynchronizeFlag.data(), pqxx::params { worker_id });
+			if (!exit) {
+				break;
+			}
+
+			const auto [not_waiting] = transaction.query1<int>(CountActiveWorkerNotWaitingForSynchronization.data());
+			if (not_waiting == 0) {
+				transaction.exec(ResetWaitingFlag.data());
+			}
+
+			transaction.exec(UpdateWorkerLastActive.data(), pqxx::params { worker_id });
+			transaction.commit();
+		} catch (const std::exception & e) {
+			std::cout << "[PostgreSQL] Failed to send worker keep alive. PostgreSQL exception: " << e.what() << std::endl;
+			std::rethrow_exception(std::current_exception());
+		}
 	}
 }

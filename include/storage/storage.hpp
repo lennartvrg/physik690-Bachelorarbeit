@@ -28,6 +28,8 @@ public:
 	virtual std::optional<NextDerivative> next_derivative(int simulation_id) = 0;
 
 	virtual void worker_keep_alive() = 0;
+
+	virtual void synchronize_workers() = 0;
 };
 
 #endif //STORAGE_HPP
