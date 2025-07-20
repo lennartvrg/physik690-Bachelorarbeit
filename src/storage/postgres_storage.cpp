@@ -395,6 +395,10 @@ bool PostgresStorage::prepare_simulation(const Config config) {
 			const bool work = get<0>(transaction.query1<int>(FetchAllWorkDoneQuery.data(), { config.simulation_id })) != 0;
 			transaction.commit();
 
+			db.unprepare("vortex");
+			db.unprepare("insert_metadata");
+			db.unprepare("insert_configurations");
+
 			return work;
 		} catch (const pqxx::serialization_failure &) {
 			std::cout << "[PostgreSQL] Conflict while preparing simulation. Trying again..." << std::endl;
@@ -404,10 +408,6 @@ bool PostgresStorage::prepare_simulation(const Config config) {
 			std::rethrow_exception(std::current_exception());
 		}
 	}
-
-	db.unprepare("vortex");
-	db.unprepare("insert_metadata");
-	db.unprepare("insert_configurations");
 }
 
 constexpr std::string_view NextVortexQuery = R"~~~~~~(
