@@ -22,13 +22,14 @@ namespace tasks {
 		}
 
 		virtual ~Task() {
-			std::cout << "[Task] Saved a total of " << counter << " results" << std::endl;
+			std::cout << "[Task] Saved a total of " << counter << " results. Synchronizing workers..." << std::endl;
+			storage->synchronize_workers();
 		}
 
 		void execute() {
 			// Staggered start
 			std::cout << "[Task] Staggering the start..." << std::endl;
-			utils::sleep_between(0, 3000);
+			utils::sleep_between(0, 1000);
 
 			// Keeping track of worker threads
 			std::vector<std::thread> workers;

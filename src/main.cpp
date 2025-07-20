@@ -20,9 +20,6 @@ int run(const Config & config, std::string_view connection_string) {
         tasks::Simulation<TStorage> { config, storage }.execute();
         tasks::Bootstrap<TStorage> { config, storage }.execute();
         tasks::Derivatives<TStorage> { config, storage }.execute();
-
-        std::cout << "Synchronizing workers..." << std::endl;
-        storage->synchronize_workers();
     }
 
     std::cout << "[Finished] Any double free error beyond this point is a problem in libpqxx. See: https://github.com/jtv/libpqxx/issues/1007" << std::endl;

@@ -319,6 +319,10 @@ LIMIT 1;
 )~~~~~~";
 
 bool PostgresStorage::prepare_simulation(const Config config) {
+	db.prepare("vortex", InsertVorticesQuery.data());
+	db.prepare("insert_metadata", InsertMetadataQuery.data());
+	db.prepare("insert_configurations", InsertConfigurationsQuery.data());
+
 	while (true) {
 		try {
 			pqxx::transaction<pqxx::repeatable_read> transaction { db };
@@ -328,13 +332,9 @@ bool PostgresStorage::prepare_simulation(const Config config) {
 				config.bootstrap_resamples
 			});
 
-			db.prepare("vortex", InsertVorticesQuery.data());
 			for (const auto size : config.vortex_sizes) {
 				transaction.exec(pqxx::prepped { "vortex" }, { config.simulation_id, size });
 			}
-
-			db.prepare("insert_metadata", InsertMetadataQuery.data());
-			db.prepare("insert_configurations", InsertConfigurationsQuery.data());
 
 			for (const auto & [key, value] : config.algorithms) {
 				transaction.exec(pqxx::prepped { "insert_metadata" }, {
@@ -392,22 +392,22 @@ bool PostgresStorage::prepare_simulation(const Config config) {
 				}
 			}
 
-			db.unprepare("vortex");
-			db.unprepare("insert_metadata");
-			db.unprepare("insert_configurations");
-
 			const bool work = get<0>(transaction.query1<int>(FetchAllWorkDoneQuery.data(), { config.simulation_id })) != 0;
 			transaction.commit();
 
 			return work;
 		} catch (const pqxx::serialization_failure &) {
-			std::cout << "[PostgreSQL] Conflict while fetching next estimate. Trying again..." << std::endl;
+			std::cout << "[PostgreSQL] Conflict while preparing simulation. Trying again..." << std::endl;
 			utils::sleep_between(1000, 3000);
 		} catch (std::exception & e) {
 			std::cout << "[PostgreSQL] Failed to prepare simulation. PostgreSQL exception: " << e.what() << std::endl;
 			std::rethrow_exception(std::current_exception());
 		}
 	}
+
+	db.unprepare("vortex");
+	db.unprepare("insert_metadata");
+	db.unprepare("insert_configurations");
 }
 
 constexpr std::string_view NextVortexQuery = R"~~~~~~(
@@ -440,7 +440,7 @@ std::optional<std::tuple<std::size_t, std::size_t>> PostgresStorage::next_vortex
 			const auto [vortex_id, lattice_size] = *pair;
 			return {{ static_cast<std::size_t>(vortex_id), static_cast<std::size_t>(lattice_size) }};
 		} catch (const pqxx::serialization_failure &) {
-			std::cout << "[PostgreSQL] Conflict while fetching next estimate. Trying again..." << std::endl;
+			std::cout << "[PostgreSQL] Conflict while fetching next vortex. Trying again..." << std::endl;
 			utils::sleep_between(1000, 3000);
 		} catch (std::exception & e) {
 			std::cout << "[PostgreSQL] Failed to fetch next vortex. PostgreSQL exception: " << e.what() << std::endl;
@@ -519,7 +519,7 @@ std::optional<Chunk> PostgresStorage::next_chunk(const int simulation_id) {
 			});
 
 		} catch (const pqxx::serialization_failure &) {
-			std::cout << "[PostgreSQL] Conflict while fetching next estimate. Trying again..." << std::endl;
+			std::cout << "[PostgreSQL] Conflict while fetching next chunk. Trying again..." << std::endl;
 			utils::sleep_between(1000, 3000);
 		} catch (const pqxx::sql_error & e) {
 			std::cout << "[PostgreSQL] Failed to fetch next chunk. PostgreSQL exception: " << e.what() << std::endl;
@@ -700,7 +700,7 @@ std::optional<NextDerivative> PostgresStorage::next_derivative(const int simulat
 			const auto [ configuration_id, type, temperature, mean, std_dev, square_mean, square_std_dev ] = derivative_opt.value();
 			return { { configuration_id, static_cast<observables::Type>(type), temperature, mean, std_dev, square_mean, square_std_dev } };
 		}  catch (const pqxx::serialization_failure &) {
-			std::cout << "[PostgreSQL] Conflict while fetching next estimate. Trying again..." << std::endl;
+			std::cout << "[PostgreSQL] Conflict while fetching next derivative. Trying again..." << std::endl;
 			utils::sleep_between(1000, 3000);
 		}  catch (const std::exception & e) {
 			std::cout << "[PostgreSQL] Failed to fetch next derivative. PostgreSQL exception: " << e.what() << std::endl;
@@ -752,8 +752,6 @@ void PostgresStorage::synchronize_workers() {
 
 	while (true) {
 		try {
-			std::this_thread::sleep_for(std::chrono::seconds(5));
-
 			pqxx::work transaction { db };
 
 			const auto [exit] = transaction.query1<bool>(FetchWorkerSynchronizeFlag.data(), pqxx::params { worker_id });
@@ -772,5 +770,8 @@ void PostgresStorage::synchronize_workers() {
 			std::cout << "[PostgreSQL] Failed to send worker keep alive. PostgreSQL exception: " << e.what() << std::endl;
 			std::rethrow_exception(std::current_exception());
 		}
+
+		// Wait a bit
+		std::this_thread::sleep_for(std::chrono::seconds(1));
 	}
 }

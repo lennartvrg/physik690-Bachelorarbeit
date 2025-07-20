@@ -794,8 +794,6 @@ void SQLiteStorage::synchronize_workers() {
 
 	try {
 		while (true) {
-			std::this_thread::sleep_for(std::chrono::seconds(5));
-
 			SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
 			SQLite::Statement synchronize_stmt { db, FetchWorkerSynchronizeFlag.data() };
@@ -821,4 +819,6 @@ void SQLiteStorage::synchronize_workers() {
 		std::cout << "[SQLite] Failed to send worker keep alive. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
 	}
+
+	std::this_thread::sleep_for(std::chrono::seconds(1));
 }
