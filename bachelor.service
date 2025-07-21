@@ -4,6 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
+EnvironmentFile=/opt/intel/oneapi/setvars.sh
 ExecStart=/home/lennart/physik690-Bachelorarbeit/buildDir/xy_model
 
 [Install]
