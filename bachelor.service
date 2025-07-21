@@ -1,0 +1,10 @@
+[Unit]
+Description=Simulates the two dimensional XY model
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/lennart/physik690-Bachelorarbeit/buildDir/xy_model
+
+[Install]
+WantedBy=multi-user.target

@@ -3,27 +3,27 @@ identifier = 0
 bootstrap_resamples = 10000
 
 [storage]
-engine = 2 # 1 is SQLite and 2 is PostgreSQL
-connection_string = "postgres://postgres:postgres@10.4.0.129:5432/Bachelor"
+engine = 1 # 1 is SQLite and 2 is PostgreSQL
+connection_string = "output/data.db"
 
 [temperature]
 max = 3.0
-steps = 48
-max_depth = 2
+steps = 32
+max_depth = 1
 
 [vortices]
 sizes = []
 
 [metropolis]
-num_chunks = 24
+num_chunks = 4
 sweeps_per_chunk = 50000
 sizes = [
-    4, 8, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160
+    16
 ]
 
 [wolff]
-num_chunks = 12
+num_chunks = 4
 sweeps_per_chunk = 50000
 sizes = [
-    4, 8, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160
+    16
 ]

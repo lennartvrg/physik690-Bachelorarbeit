@@ -1,0 +1,55 @@
+#cloud-config
+users:
+  - name: root
+    lock_passwd: true
+  - name: lennart
+    groups: users, admin
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMqQpkTmFzTRFG6haL2qKGQmaCR3OZ6uvTYLNY1O28TY
+
+chpasswd:
+  expire: false
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - meson
+  - libsimde-dev
+  - libboost-all-dev
+  - libfftw3-dev
+  - libtomlplusplus-dev
+  - libflatbuffers-dev
+  - libsqlite3-dev
+  - libpq5
+  - libpkgconf3
+  - libpq-dev
+  - libssl-dev
+  - pkgconf
+  - pkgconf-bin
+
+runcmd:
+  - ufw allow 2222
+  - ufw enable
+  - sed -i -e '/^\(#\|\)PermitRootLogin/s/^.*$/PermitRootLogin no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)Port/s/^.*$/Port 2222/' /etc/ssh/sshd_config
+  - sed -i '$a AllowUsers lennart' /etc/ssh/sshd_config
+  - systemctl enable ssh && systemctl start ssh
+  - wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+  - echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+  - apt-get update && apt-get install -y intel-basekit
+  - cd /home/lennart
+  - wget https://launchpad.net/ubuntu/+archive/primary/+files/libpqxx-7.10_7.10.0-2_amd64.deb
+  - wget https://launchpad.net/ubuntu/+archive/primary/+files/libpqxx-dev_7.10.0-2_amd64.deb
+  - dpkg -i libpqxx-7.10_7.10.0-2_amd64.deb libpqxx-dev_7.10.0-2_amd64.deb
+  - git clone --recurse-submodules https://github.com/lennartvrg/physik690-Bachelorarbeit.git
+  - cd physik690-Bachelorarbeit
+  - mkdir buildDir && source /opt/intel/oneapi/setvars.sh && CC=icx CXX=icpx meson setup --reconfigure --buildtype=release buildDir/ .
+  - cd buildDir && ninja && cd ..
+  - chown -R lennart:lennart .
+  - cp bachelor.service /etc/systemd/system
+  - systemctl daemon-reload && systemctl enable bachelor
+  - reboot

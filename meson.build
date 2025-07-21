@@ -26,8 +26,8 @@ dependencies = [
 ]
 
 incdir = include_directories(['include', 'thirdparty/Xoshiro-cpp'])
-run_command('flatc', '--cpp', '-o', 'include/schemas', 'schemas/vector.fbs', check: true)
-run_command('flatc', '--python', '-o', 'schemas/python', 'schemas/vector.fbs', check: true)
+run_command('flatc', '--cpp', '-o', 'include/schemas', 'schemas/vector.fbs', check: false)
+run_command('flatc', '--python', '-o', 'schemas/python', 'schemas/vector.fbs', check: false)
 
 exe = executable(
   'xy_model',
