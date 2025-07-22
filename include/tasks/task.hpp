@@ -21,10 +21,7 @@ namespace tasks {
 
 		}
 
-		virtual ~Task() {
-			std::cout << "[Task] Saved a total of " << counter << " results. Synchronizing workers..." << std::endl;
-			storage->synchronize_workers();
-		}
+		virtual ~Task() = default;
 
 		void execute() {
 			// Staggered start

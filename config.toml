@@ -1,10 +1,10 @@
 [simulation]
 identifier = 0
-bootstrap_resamples = 10000
+bootstrap_resamples = 40000
 
 [storage]
 engine = 2 # 1 is SQLite and 2 is PostgreSQL
-connection_string = "postgres://postgres:postgres@10.4.0.129:5432/Bachelor"
+connection_string = "postgres://lennart:alpaca1234@10.0.0.2:5432/bachelor"
 
 [temperature]
 max = 3.0
@@ -18,12 +18,12 @@ sizes = []
 num_chunks = 24
 sweeps_per_chunk = 50000
 sizes = [
-    4, 8, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160
+    4, 8, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 250, 256, 272, 288, 304, 320
 ]
 
 [wolff]
 num_chunks = 12
 sweeps_per_chunk = 50000
 sizes = [
-    4, 8, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160
+    4, 8, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 250, 256, 272, 288, 304, 320
 ]

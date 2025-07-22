@@ -1,0 +1,35 @@
+#cloud-config
+users:
+  - name: root
+    lock_passwd: true
+  - name: lennart
+    groups: users, admin
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMqQpkTmFzTRFG6haL2qKGQmaCR3OZ6uvTYLNY1O28TY
+
+chpasswd:
+  expire: false
+
+package_update: true
+package_upgrade: true
+
+apt:
+  sources:
+    postgresql:
+      keyid: B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8
+      source: deb https://apt.postgresql.org/pub/repos/apt noble-pgdg main
+
+packages:
+  - postgresql
+
+runcmd:
+  - ufw allow 2222
+  - ufw enable
+  - sed -i -e '/^\(#\|\)PermitRootLogin/s/^.*$/PermitRootLogin no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)Port/s/^.*$/Port 2222/' /etc/ssh/sshd_config
+  - sed -i '$a AllowUsers lennart' /etc/ssh/sshd_config
+  - systemctl enable ssh && systemctl start ssh
+  - systemctl enable postgresql
