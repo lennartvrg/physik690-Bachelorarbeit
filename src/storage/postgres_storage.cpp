@@ -755,7 +755,7 @@ void PostgresStorage::synchronize_workers() {
 			pqxx::work transaction { db };
 
 			const auto [exit] = transaction.query1<bool>(FetchWorkerSynchronizeFlag.data(), pqxx::params { worker_id });
-			if (!exit) {
+			if (exit) {
 				break;
 			}
 
