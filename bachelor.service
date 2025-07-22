@@ -1,12 +1,19 @@
 [Unit]
 Description=Simulates the two dimensional XY model
-After=network.target
+Wants=network-online.target
+After=network-online.target
+StartLimitInterval=200
+StartLimitBurst=5
 
 [Service]
 Type=simple
 User=lennart
-WorkingDirectory=/home/lennart/physik690-Bachelorarbeit
-ExecStart=/bin/bash -c 'source /opt/intel/oneapi/setvars.sh && ./buildDir/xy_model > output.log 2>&1'
+Restart=on-failure
+RestartSec=30
+StandardError=/home/lennart/physik690-Bachelorarbeit
+StandardOutput=/home/lennart/physik690-Bachelorarbeit/output.log
+WorkingDirectory=/home/lennart/physik690-Bachelorarbeit/output.log
+ExecStart=/bin/bash -c 'source /opt/intel/oneapi/setvars.sh && ./buildDir/xy_model'
 
 [Install]
 WantedBy=multi-user.target
