@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS "estimates" (
 	configuration_id		INTEGER				NOT NULL,
 	type_id					INTEGER				NOT NULL,
 
+	worker_id				INTEGER				NOT NULL,
 	start_time				BIGINT				NOT NULL,
 	end_time				BIGINT				NOT NULL CHECK (end_time >= start_time),
 	time					BIGINT				GENERATED ALWAYS AS (end_time - start_time) STORED,
@@ -95,6 +96,7 @@ CREATE TABLE IF NOT EXISTS "estimates" (
 
 	CONSTRAINT "PK.Estimates_ConfigurationId_TypeId" PRIMARY KEY (configuration_id, type_id),
 	CONSTRAINT "FK.Estimates_ConfigurationId" FOREIGN KEY (configuration_id) REFERENCES "configurations" (configuration_id),
+	CONSTRAINT "FK.Estimates_WorkerId" FOREIGN KEY (worker_id) REFERENCES "workers" (worker_id),
 	CONSTRAINT "FK.Estimates_TypeId" FOREIGN KEY (type_id) REFERENCES "types" (type_id)
 );
 
@@ -135,12 +137,6 @@ BEGIN
 	UPDATE "vortices" SET "worker_id" = NULL WHERE "worker_id" IN (
 		SELECT "worker_id" FROM "workers" WHERE "last_active_at" < CAST(extract(epoch FROM now() - INTERVAL '5 minutes') AS int)
 	);
-
-	DELETE FROM "workers" WHERE NOT EXISTS (
-		SELECT * FROM "configurations" c WHERE c."active_worker_id" = "worker_id"
-	) AND NOT EXISTS (
-		SELECT * FROM "vortices" v WHERE v."worker_id" = "worker_id"
-	) AND "last_active_at" < CAST(extract(epoch FROM now() - INTERVAL '5 minutes') AS int);
 	RETURN NEW;
 END;
 $BODY$ LANGUAGE plpgsql;
@@ -155,6 +151,7 @@ CREATE TABLE IF NOT EXISTS "chunks" (
 	configuration_id		INTEGER				NOT NULL,
 	"index"					INTEGER				NOT NULL,
 
+	worker_id				INTEGER				NOT NULL,
 	start_time				BIGINT				NOT NULL,
 	end_time				BIGINT				NOT NULL CHECK (end_time >= start_time),
 	time					BIGINT				GENERATED ALWAYS AS (end_time - start_time) STORED,
@@ -162,6 +159,7 @@ CREATE TABLE IF NOT EXISTS "chunks" (
 	spins					BYTEA				NOT NULL,
 
 	CONSTRAINT "PK.Chunks_ChunkId" PRIMARY KEY (chunk_id),
+	CONSTRAINT "FK.Chunks_WorkerId" FOREIGN KEY (worker_id) REFERENCES "workers" (worker_id),
 	CONSTRAINT "FK.Chunks_ConfigurationId" FOREIGN KEY (configuration_id) REFERENCES "configurations" (configuration_id)
 );
 
@@ -529,7 +527,7 @@ std::optional<Chunk> PostgresStorage::next_chunk(const int simulation_id) {
 }
 
 constexpr std::string_view InsertChunkQuery = R"~~~~~~(
-INSERT INTO "chunks" (configuration_id, "index", start_time, end_time, spins) VALUES ($1, $2, $3, $4, $5) RETURNING chunk_id
+INSERT INTO "chunks" (configuration_id, "index", worker_id, start_time, end_time, spins) VALUES ($1, $2, $3, $4, $5, $6) RETURNING chunk_id
 )~~~~~~";
 
 constexpr std::string_view InsertAutocorrelationQuery = R"~~~~~~(
@@ -549,7 +547,7 @@ void PostgresStorage::save_chunk(const Chunk & chunk, const int64_t start_time, 
 		pqxx::work transaction { db };
 
 		const auto [chunk_id] = transaction.query1<int>(InsertChunkQuery.data(), {
-			chunk.configuration_id, chunk.index, start_time, end_time, pqxx::binary_cast(spins.data(), spins.size())
+			chunk.configuration_id, chunk.index, worker_id, start_time, end_time, pqxx::binary_cast(spins.data(), spins.size())
 		});
 
 		db.prepare("result", InsertResultQuery.data());
@@ -644,7 +642,7 @@ std::optional<std::tuple<Estimate, std::vector<double_t>>> PostgresStorage::next
 }
 
 constexpr std::string_view InsertEstimateQuery = R"~~~~~~(
-INSERT INTO "estimates" (configuration_id, type_id, start_time, end_time, mean, std_dev) VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO "estimates" (configuration_id, type_id, worker_id, start_time, end_time, mean, std_dev) VALUES ($1, $2, $3, $4, $5, $6, $7)
 )~~~~~~";
 
 void PostgresStorage::save_estimate(const int configuration_id, const int64_t start_time, const int64_t end_time, const observables::Type type, const double_t mean, const double_t std_dev) {
@@ -652,7 +650,7 @@ void PostgresStorage::save_estimate(const int configuration_id, const int64_t st
 		pqxx::work transaction { db };
 
 		transaction.exec(InsertEstimateQuery.data(), {
-			configuration_id, static_cast<int>(type), start_time, end_time, mean, std_dev
+			configuration_id, static_cast<int>(type), worker_id, start_time, end_time, mean, std_dev
 		});
 
 		transaction.exec(RemoveWorkerQuery.data(), {

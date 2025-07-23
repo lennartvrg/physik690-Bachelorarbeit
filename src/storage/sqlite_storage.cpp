@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS "estimates" (
 	configuration_id		INTEGER				NOT NULL,
 	type_id					INTEGER				NOT NULL,
 
+	worker_id				INTEGER				NOT NULL,
 	start_time				INTEGER				NOT NULL,
 	end_time				INTEGER				NOT NULL CHECK (end_time >= start_time),
 	time					INTEGER				GENERATED ALWAYS AS (end_time - start_time) STORED,
@@ -95,6 +96,7 @@ CREATE TABLE IF NOT EXISTS "estimates" (
 
 	CONSTRAINT "PK.Estimates_ConfigurationId_TypeId" PRIMARY KEY (configuration_id, type_id),
 	CONSTRAINT "FK.Estimates_ConfigurationId" FOREIGN KEY (configuration_id) REFERENCES "configurations" (configuration_id),
+	CONSTRAINT "FK.Estimates_WokerId" FOREIGN KEY (worker_id) REFERENCES "workers" (worker_id),
 	CONSTRAINT "FK.Estimates_TypeId" FOREIGN KEY (type_id) REFERENCES "types" (type_id)
 );
 
@@ -136,12 +138,6 @@ BEGIN
 	UPDATE "vortices" SET "worker_id" = NULL WHERE "worker_id" IN (
 		SELECT "worker_id" FROM "workers" WHERE "last_active_at" < unixepoch('now', '-5 minutes')
 	);
-
-	DELETE FROM "workers" WHERE NOT EXISTS (
-		SELECT * FROM "configurations" c WHERE c."active_worker_id" = "worker_id"
-	) AND NOT EXISTS (
-		SELECT * FROM "vortices" v WHERE v."worker_id" = "worker_id"
-	) AND "last_active_at" < unixepoch('now', '-5 minutes');
 END;
 
 CREATE TABLE IF NOT EXISTS "chunks" (
@@ -150,6 +146,7 @@ CREATE TABLE IF NOT EXISTS "chunks" (
 	configuration_id		INTEGER				NOT NULL,
 	"index"					INTEGER				NOT NULL,
 
+	worker_id				INTEGER				NOT NULL,
 	start_time				INTEGER				NOT NULL,
 	end_time				INTEGER				NOT NULL CHECK (end_time >= start_time),
 	time					INTEGER				GENERATED ALWAYS AS (end_time - start_time),
@@ -157,7 +154,8 @@ CREATE TABLE IF NOT EXISTS "chunks" (
 	spins					BLOB				NOT NULL,
 
 	CONSTRAINT "PK.Chunks_ChunkId" PRIMARY KEY (chunk_id),
-	CONSTRAINT "FK.Chunks_ConfigurationId" FOREIGN KEY (configuration_id) REFERENCES "configurations" (configuration_id)
+	CONSTRAINT "FK.Chunks_ConfigurationId" FOREIGN KEY (configuration_id) REFERENCES "configurations" (configuration_id),
+	CONSTRAINT "FK.Chunks_WokerId" FOREIGN KEY (worker_id) REFERENCES "workers" (worker_id)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS "IX.Chunks_ConfigurationId_Index" ON "chunks" ("configuration_id", "index");
@@ -547,7 +545,7 @@ std::optional<Chunk> SQLiteStorage::next_chunk(const int simulation_id) {
 }
 
 constexpr std::string_view InsertChunkQuery = R"~~~~~~(
-INSERT INTO "chunks" (configuration_id, "index", start_time, end_time, spins) VALUES (@configuration_id, @index, @start_time, @end_time, @spins) RETURNING chunk_id
+INSERT INTO "chunks" (configuration_id, "index", worker_id, start_time, end_time, spins) VALUES (@configuration_id, @index, @worker_id, @start_time, @end_time, @spins) RETURNING chunk_id
 )~~~~~~";
 
 constexpr std::string_view InsertAutocorrelationQuery = R"~~~~~~(
@@ -569,6 +567,7 @@ void SQLiteStorage::save_chunk(const Chunk & chunk, const int64_t start_time, co
 		SQLite::Statement chunk_stmt { db, InsertChunkQuery.data() };
 		chunk_stmt.bind("@configuration_id", chunk.configuration_id);
 		chunk_stmt.bind("@index", chunk.index);
+		chunk_stmt.bind("@worker_id", worker_id);
 		chunk_stmt.bind("@start_time", start_time);
 		chunk_stmt.bind("@end_time", end_time);
 		chunk_stmt.bind("@spins", spins.data(), static_cast<int>(spins.size()));
@@ -672,7 +671,7 @@ std::optional<std::tuple<Estimate, std::vector<double_t>>> SQLiteStorage::next_e
 }
 
 constexpr std::string_view InsertEstimateQuery = R"~~~~~~(
-INSERT INTO "estimates" (configuration_id, type_id, start_time, end_time, mean, std_dev) VALUES (@configuration_id, @type_id, @start_time, @end_time, @mean, @std_dev)
+INSERT INTO "estimates" (configuration_id, type_id, worker_id, start_time, end_time, mean, std_dev) VALUES (@configuration_id, @type_id, @worker_id, @start_time, @end_time, @mean, @std_dev)
 )~~~~~~";
 
 void SQLiteStorage::save_estimate(const int configuration_id, const int64_t start_time, const int64_t end_time, const observables::Type type, const double_t mean, const double_t std_dev) {
@@ -682,6 +681,7 @@ void SQLiteStorage::save_estimate(const int configuration_id, const int64_t star
 		SQLite::Statement estimate_stmt { db, InsertEstimateQuery.data() };
 		estimate_stmt.bind("@configuration_id", configuration_id);
 		estimate_stmt.bind("@type_id", type);
+		estimate_stmt.bind("@worker_id", worker_id);
 		estimate_stmt.bind("@start_time", start_time);
 		estimate_stmt.bind("@end_time", end_time);
 		estimate_stmt.bind("@mean", mean);
