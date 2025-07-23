@@ -39,9 +39,9 @@ namespace tasks {
 			throw std::invalid_argument("Derivative type is neither energy or magnetization");
 		}
 
-		void save_task(std::shared_ptr<TStorage> storage, const NextDerivative & task, int64_t start_time, int64_t end_time, const std::tuple<observables::Type, double_t, double_t> & result) override {
+		void save_task(std::shared_ptr<TStorage> storage, const NextDerivative & task, int32_t thread_num, int64_t start_time, int64_t end_time, const std::tuple<observables::Type, double_t, double_t> & result) override {
 			std::cout << "[Derivatives] ConfigurationId: " << task.configuration_id << " | Type: " << get<0>(result) << std::endl;
-			storage->save_estimate(task.configuration_id, start_time, end_time, get<0>(result), get<1>(result), get<2>(result));
+			storage->save_estimate(task.configuration_id, thread_num, start_time, end_time, get<0>(result), get<1>(result), get<2>(result));
 		}
 
 	private:

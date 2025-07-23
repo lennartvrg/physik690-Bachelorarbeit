@@ -87,6 +87,8 @@ CREATE TABLE IF NOT EXISTS "estimates" (
 	type_id					INTEGER				NOT NULL,
 
 	worker_id				INTEGER				NOT NULL,
+	thread_num				INTEGER				NOT NULL,
+
 	start_time				BIGINT				NOT NULL,
 	end_time				BIGINT				NOT NULL CHECK (end_time >= start_time),
 	time					BIGINT				GENERATED ALWAYS AS (end_time - start_time) STORED,
@@ -152,6 +154,8 @@ CREATE TABLE IF NOT EXISTS "chunks" (
 	"index"					INTEGER				NOT NULL,
 
 	worker_id				INTEGER				NOT NULL,
+	thread_num				INTEGER				NOT NULL,
+
 	start_time				BIGINT				NOT NULL,
 	end_time				BIGINT				NOT NULL CHECK (end_time >= start_time),
 	time					BIGINT				GENERATED ALWAYS AS (end_time - start_time) STORED,
@@ -527,7 +531,7 @@ std::optional<Chunk> PostgresStorage::next_chunk(const int simulation_id) {
 }
 
 constexpr std::string_view InsertChunkQuery = R"~~~~~~(
-INSERT INTO "chunks" (configuration_id, "index", worker_id, start_time, end_time, spins) VALUES ($1, $2, $3, $4, $5, $6) RETURNING chunk_id
+INSERT INTO "chunks" (configuration_id, "index", worker_id, thread_num, start_time, end_time, spins) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING chunk_id
 )~~~~~~";
 
 constexpr std::string_view InsertAutocorrelationQuery = R"~~~~~~(
@@ -542,12 +546,12 @@ constexpr std::string_view RemoveWorkerQuery = R"~~~~~~(
 UPDATE "configurations" SET active_worker_id = NULL WHERE "configuration_id" = $1 AND "active_worker_id" = $2
 )~~~~~~";
 
-void PostgresStorage::save_chunk(const Chunk & chunk, const int64_t start_time, const int64_t end_time, const std::span<const uint8_t> & spins, const std::map<observables::Type, std::tuple<double_t, std::vector<uint8_t>, std::optional<std::vector<uint8_t>>>> & results) {
+void PostgresStorage::save_chunk(const Chunk & chunk, const int32_t thread_num, const int64_t start_time, const int64_t end_time, const std::span<const uint8_t> & spins, const std::map<observables::Type, std::tuple<double_t, std::vector<uint8_t>, std::optional<std::vector<uint8_t>>>> & results) {
 	try {
 		pqxx::work transaction { db };
 
 		const auto [chunk_id] = transaction.query1<int>(InsertChunkQuery.data(), {
-			chunk.configuration_id, chunk.index, worker_id, start_time, end_time, pqxx::binary_cast(spins.data(), spins.size())
+			chunk.configuration_id, chunk.index, worker_id, thread_num, start_time, end_time, pqxx::binary_cast(spins.data(), spins.size())
 		});
 
 		db.prepare("result", InsertResultQuery.data());
@@ -642,15 +646,15 @@ std::optional<std::tuple<Estimate, std::vector<double_t>>> PostgresStorage::next
 }
 
 constexpr std::string_view InsertEstimateQuery = R"~~~~~~(
-INSERT INTO "estimates" (configuration_id, type_id, worker_id, start_time, end_time, mean, std_dev) VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO "estimates" (configuration_id, type_id, worker_id, thread_num, start_time, end_time, mean, std_dev) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 )~~~~~~";
 
-void PostgresStorage::save_estimate(const int configuration_id, const int64_t start_time, const int64_t end_time, const observables::Type type, const double_t mean, const double_t std_dev) {
+void PostgresStorage::save_estimate(const int configuration_id, const int32_t thread_num, const int64_t start_time, const int64_t end_time, const observables::Type type, const double_t mean, const double_t std_dev) {
 	try {
 		pqxx::work transaction { db };
 
 		transaction.exec(InsertEstimateQuery.data(), {
-			configuration_id, static_cast<int>(type), worker_id, start_time, end_time, mean, std_dev
+			configuration_id, static_cast<int>(type), worker_id, thread_num, start_time, end_time, mean, std_dev
 		});
 
 		transaction.exec(RemoveWorkerQuery.data(), {

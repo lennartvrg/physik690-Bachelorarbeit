@@ -100,11 +100,13 @@ namespace tasks {
 
 		virtual TResult execute_task(const TTask & task) = 0;
 
-		virtual void save_task(std::shared_ptr<TStorage> storage, const TTask & task, int64_t start_time, int64_t end_time, const TResult & result) = 0;
+		virtual void save_task(std::shared_ptr<TStorage> storage, const TTask & task, int32_t thread_num, int64_t start_time, int64_t end_time, const TResult & result) = 0;
 
 	private:
 		/// A counter to keep track of how many results have been saved to storage.
-		std::size_t counter {0};
+		std::size_t counter { 0 };
+
+		std::atomic_int threads { 0 };
 
 		/// The underlying storage engine for this task.
 		std::shared_ptr<TStorage> storage;
@@ -123,13 +125,14 @@ namespace tasks {
 
 		std::mutex available_results_mutex;
 
-		std::queue<std::tuple<TTask, int64_t, int64_t, TResult>> available_results;
+		std::queue<std::tuple<TTask, int32_t, int64_t, int64_t, TResult>> available_results;
 
 		std::mutex available_results_signal_mutex;
 
 		std::condition_variable available_results_signal;
 
 		void execute_worker() {
+			const auto thread_num = threads++;
 			while (!exit_flag) {
 				// Signal that the worker is looking for a task
 				++idle_workers;
@@ -166,20 +169,20 @@ namespace tasks {
 
 				// Push to the result queue
 				std::unique_lock lock_results { available_results_mutex };
-				available_results.push({ task, start_time_ms, end_time_ms, result });
+				available_results.push({ task, thread_num, start_time_ms, end_time_ms, result });
 
 				// Signal the result is ready
 				available_results_signal.notify_one();
 			}
 		}
 
-		void save_queue(std::queue<std::tuple<TTask, int64_t, int64_t, TResult>> & queue, std::mutex & queue_mutex) {
+		void save_queue(std::queue<std::tuple<TTask, int32_t, int64_t, int64_t, TResult>> & queue, std::mutex & queue_mutex) {
 			const std::unique_lock lock { queue_mutex };
 			while (!queue.empty()) {
-				const auto [task, start_time, end_time, result] = queue.front();
+				const auto [task, thread_num, start_time, end_time, result] = queue.front();
 				queue.pop();
 
-				save_task(storage, task, start_time, end_time, result);
+				save_task(storage, task, thread_num, start_time, end_time, result);
 				counter++;
 			}
 		}

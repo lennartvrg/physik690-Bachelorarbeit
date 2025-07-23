@@ -52,7 +52,7 @@ namespace tasks {
 			return results;
 		}
 
-		void save_task(std::shared_ptr<TStorage> storage, const std::tuple<std::size_t, std::size_t> & task, [[maybe_unused]] int64_t start_time, [[maybe_unused]] int64_t end_time, const std::vector<std::tuple<double_t, std::size_t, std::vector<double_t>>> & results) override {
+		void save_task(std::shared_ptr<TStorage> storage, const std::tuple<std::size_t, std::size_t> & task, [[maybe_unused]] int32_t thread_num, [[maybe_unused]] int64_t start_time, [[maybe_unused]] int64_t end_time, const std::vector<std::tuple<double_t, std::size_t, std::vector<double_t>>> & results) override {
 			storage->save_vortices(get<0>(task), results);
 		}
 	};

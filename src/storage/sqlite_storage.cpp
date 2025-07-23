@@ -87,6 +87,8 @@ CREATE TABLE IF NOT EXISTS "estimates" (
 	type_id					INTEGER				NOT NULL,
 
 	worker_id				INTEGER				NOT NULL,
+	thread_num				INTEGER				NOT NULL,
+
 	start_time				INTEGER				NOT NULL,
 	end_time				INTEGER				NOT NULL CHECK (end_time >= start_time),
 	time					INTEGER				GENERATED ALWAYS AS (end_time - start_time) STORED,
@@ -147,6 +149,8 @@ CREATE TABLE IF NOT EXISTS "chunks" (
 	"index"					INTEGER				NOT NULL,
 
 	worker_id				INTEGER				NOT NULL,
+	thread_num				INTEGER				NOT NULL,
+
 	start_time				INTEGER				NOT NULL,
 	end_time				INTEGER				NOT NULL CHECK (end_time >= start_time),
 	time					INTEGER				GENERATED ALWAYS AS (end_time - start_time),
@@ -545,7 +549,7 @@ std::optional<Chunk> SQLiteStorage::next_chunk(const int simulation_id) {
 }
 
 constexpr std::string_view InsertChunkQuery = R"~~~~~~(
-INSERT INTO "chunks" (configuration_id, "index", worker_id, start_time, end_time, spins) VALUES (@configuration_id, @index, @worker_id, @start_time, @end_time, @spins) RETURNING chunk_id
+INSERT INTO "chunks" (configuration_id, "index", worker_id, thread_num, start_time, end_time, spins) VALUES (@configuration_id, @index, @worker_id, @thread_num, @start_time, @end_time, @spins) RETURNING chunk_id
 )~~~~~~";
 
 constexpr std::string_view InsertAutocorrelationQuery = R"~~~~~~(
@@ -560,7 +564,7 @@ constexpr std::string_view RemoveWorkerQuery = R"~~~~~~(
 UPDATE "configurations" SET active_worker_id = NULL WHERE "configuration_id" = @configuration_id AND "active_worker_id" = @worker_id
 )~~~~~~";
 
-void SQLiteStorage::save_chunk(const Chunk & chunk, const int64_t start_time, const int64_t end_time, const std::span<const uint8_t> & spins, const std::map<observables::Type, std::tuple<double_t, std::vector<uint8_t>, std::optional<std::vector<uint8_t>>>> & results) {
+void SQLiteStorage::save_chunk(const Chunk & chunk, const int32_t thread_num, const int64_t start_time, const int64_t end_time, const std::span<const uint8_t> & spins, const std::map<observables::Type, std::tuple<double_t, std::vector<uint8_t>, std::optional<std::vector<uint8_t>>>> & results) {
 	try {
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
@@ -568,6 +572,7 @@ void SQLiteStorage::save_chunk(const Chunk & chunk, const int64_t start_time, co
 		chunk_stmt.bind("@configuration_id", chunk.configuration_id);
 		chunk_stmt.bind("@index", chunk.index);
 		chunk_stmt.bind("@worker_id", worker_id);
+		chunk_stmt.bind("@thread_num", thread_num);
 		chunk_stmt.bind("@start_time", start_time);
 		chunk_stmt.bind("@end_time", end_time);
 		chunk_stmt.bind("@spins", spins.data(), static_cast<int>(spins.size()));
@@ -671,10 +676,10 @@ std::optional<std::tuple<Estimate, std::vector<double_t>>> SQLiteStorage::next_e
 }
 
 constexpr std::string_view InsertEstimateQuery = R"~~~~~~(
-INSERT INTO "estimates" (configuration_id, type_id, worker_id, start_time, end_time, mean, std_dev) VALUES (@configuration_id, @type_id, @worker_id, @start_time, @end_time, @mean, @std_dev)
+INSERT INTO "estimates" (configuration_id, type_id, worker_id, thread_num, start_time, end_time, mean, std_dev) VALUES (@configuration_id, @type_id, @worker_id, @thread_num, @start_time, @end_time, @mean, @std_dev)
 )~~~~~~";
 
-void SQLiteStorage::save_estimate(const int configuration_id, const int64_t start_time, const int64_t end_time, const observables::Type type, const double_t mean, const double_t std_dev) {
+void SQLiteStorage::save_estimate(const int configuration_id, const int32_t thread_num, const int64_t start_time, const int64_t end_time, const observables::Type type, const double_t mean, const double_t std_dev) {
 	try {
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
@@ -682,6 +687,7 @@ void SQLiteStorage::save_estimate(const int configuration_id, const int64_t star
 		estimate_stmt.bind("@configuration_id", configuration_id);
 		estimate_stmt.bind("@type_id", type);
 		estimate_stmt.bind("@worker_id", worker_id);
+		estimate_stmt.bind("@thread_num", thread_num);
 		estimate_stmt.bind("@start_time", start_time);
 		estimate_stmt.bind("@end_time", end_time);
 		estimate_stmt.bind("@mean", mean);

@@ -25,12 +25,12 @@ namespace tasks {
 			return analysis::bootstrap_blocked(rng, values, estimate.bootstrap_resamples);
 		}
 
-		void save_task(std::shared_ptr<TStorage> storage, const std::tuple<Estimate, std::vector<double_t>> & task, int64_t start_time, int64_t end_time, const std::tuple<double_t, double_t> & result) override {
+		void save_task(std::shared_ptr<TStorage> storage, const std::tuple<Estimate, std::vector<double_t>> & task, int32_t thread_num, int64_t start_time, int64_t end_time, const std::tuple<double_t, double_t> & result) override {
 			const auto [estimate, _1] = task;
 			const auto [mean, std_dev] = result;
 
 			std::cout << "[Bootstrap] ConfigurationId: " << estimate.configuration_id << " | Type: " << estimate.type << std::endl;
-			storage->save_estimate(estimate.configuration_id, start_time, end_time, estimate.type, mean, std_dev);
+			storage->save_estimate(estimate.configuration_id, thread_num, start_time, end_time, estimate.type, mean, std_dev);
 		}
 	};
 }

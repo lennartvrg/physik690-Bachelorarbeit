@@ -33,7 +33,7 @@ namespace tasks {
 			return { lattice.get_spins(), results };
 		}
 
-		void save_task(std::shared_ptr<TStorage> storage, const Chunk & chunk, int64_t start_time, int64_t end_time, const std::tuple<std::vector<double_t>, observables::Map> & result) override {
+		void save_task(std::shared_ptr<TStorage> storage, const Chunk & chunk, int32_t thread_num, int64_t start_time, int64_t end_time, const std::tuple<std::vector<double_t>, observables::Map> & result) override {
 			const auto [ spin_data, measurements ] = result;
 			const auto spins = schemas::serialize(spin_data);
 
@@ -44,7 +44,7 @@ namespace tasks {
 			}
 
 			std::cout << "[Simulation] " << chunk.algorithm << " | Size: " << chunk.lattice_size << " | ConfigurationId: " << chunk.configuration_id << " | Index: " << chunk.index << std::endl;
-			storage->save_chunk(chunk, start_time, end_time, spins, results);
+			storage->save_chunk(chunk, thread_num, start_time, end_time, spins, results);
 		}
 	};
 }
