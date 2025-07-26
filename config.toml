@@ -1,6 +1,6 @@
 [simulation]
 identifier = 0
-bootstrap_resamples = 40000
+bootstrap_resamples = 200000
 
 [storage]
 engine = 2 # 1 is SQLite and 2 is PostgreSQL
