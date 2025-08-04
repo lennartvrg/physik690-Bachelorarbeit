@@ -1,12 +1,19 @@
 \section{Numerical Methods}
+	As stated in the introduction in~\cref{chap:introduction}, the goal is to simulate the two dimensional XY model with periodic boundary conditions using the Metropolis-Hastings and the Wolff-Cluster algorithms. In the following section I will present the concepts needed for understanding and implementing the simulation.
+	
+	\subsection{Importance Sampling}
+		
+
 	\subsection{Metropolis Algorithm}
+	
+	
 		The overall procedure for the lattice is as follows:
 		\begin{enumerate}
-			\item Calculate $E$ and $M$ for the initial lattice configuration.
+			\item Calculate $E$, $M$ and $\Gamma$ for the initial lattice configuration.
 			\item Perform a lattice sweep by iterating over all lattice sites. For every site $i$ do:
 			\begin{enumerate}
 				\item Propose a new angle $\theta_i \in [0,2\pi)$ from a uniform distribution.
-				\item Calculate $\Delta H = \Delta E$ and $\Delta M$ for the proposed new state.
+				\item Calculate $\Delta H = \Delta E$, $\Delta M$ and $\Delta \Gamma$ for the proposed new state.
 				\item Accept or reject state with probability $P = \min{(1, \exp{(-\beta\Delta H)})}$.
 			\end{enumerate}
 			\item Update the observables $E \mathrel{{+}{=}} \Delta E$ and $M \mathrel{{+}{=}} \Delta M$ and add them to the result set.
