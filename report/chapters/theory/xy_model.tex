@@ -1,5 +1,5 @@
 \section{XY Model}
-	The XY model is the generalization of the Ising model where the $\mathbb{Z}$ symmetry is replaced by a continuous $U(2)$ symmetry.
+	The XY model is the generalization of the Ising model where the $\mathbb{Z}_2$ symmetry is replaced by a continuous $U(2)$ symmetry.
 	
 	\subsection{Definition}
 		The XY model describes the spins $\sigma_i$ as two-dimensional vectors on the unit circle
@@ -22,7 +22,7 @@
 		As the observables of the XY model scale with the number of lattice sites, it is generally more insightful to study the observables per spin. This way, the finite size scaling of the observables can be be better observed.
 	
 		\paragraph{Energy per Spin}
-			The total energy of the system is given by its Hamiltonien. For the two dimensional lattice with side length $L$, periodic boundary condition and nearest neighbour approximation the total energy is this
+			The total energy of the system is given by its Hamiltonian. For the two dimensional lattice with side length $L$, periodic boundary condition and nearest neighbour approximation the total energy is thus
 			\begin{equation}
 				E = - \frac{1}{L^2} \sum_{\langle i, j \rangle}{\cos(\Delta \theta)}.
 			\end{equation}
@@ -50,12 +50,10 @@
 			\begin{equation}
 				\Upsilon = -\frac{1}{2} \langle E \rangle - \frac{J}{k_B T L^2} \left\langle \left(\sum_{\langle i,j \rangle}{\sin(\Delta \theta) \vec{r_{ij}} \cdot \vec{e}}\right)^2 \right\rangle
 			\end{equation}
-			where, in addition to the existing definitions, $\vec{r}_{i,j}$ is the vector from site $i$ to site $j$ and $\vec{e}$ is an arbritrary unit vector. As only neighbouring spins are included, the set of possibles values of $\vec{r}_{i,j}$ is
-			\begin{equation}
-				\vec{r}_{i,j} \in \left\{ s \right\}
-			\end{equation}
+			\cite[eq. 3.2]{teitel_helicity} where, in addition to the existing definitions, $\vec{r}_{i,j}$ is the vector from site $i$ to site $j$ and $\vec{e}$ is an arbritrary unit vector. One may choose $\vec{e}$ such that it points in a row of the lattice to the right. Thus only neighbours within a row contribute as $\vec{r}_{ij} \cdot \vec{e} = 0$ otherwise.
 	
 	\subsection{Kosterlitz–Thouless Transition}
+		Unlike the Ising model, the XY model does not feature a 2nd order phase transition of the usual kind \enquote{as the ground state is unstable against low-energy spin-wave excitations} \cite[p. 1190]{kosterlitz}. It was shown by \cite{kosterlitz} that instead there is something we now call the KT phase transition where below a critical temperature $T_C$ metastable states emerge.
 	
-	\subsection{Vortices}
-	Test
+		\subsubsection{Vortices}
+			These metastable states \enquote{correspond to vortices which are closely bound in pairs} \cite[p. 1190]{kosterlitz}. The vortex/antivortex pairs come closer together with decreasing temperature until they pair-annihilate.
