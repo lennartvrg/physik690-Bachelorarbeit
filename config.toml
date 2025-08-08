@@ -8,21 +8,21 @@ connection_string = "postgres://lennart:alpaca1234@10.0.0.2:5432/bachelor"
 
 [temperature]
 max = 3.0
-steps = 48
-max_depth = 3
+steps = 64
+max_depth = 2
 
 [vortices]
 sizes = []
 
 [metropolis]
-num_chunks = 24
+num_chunks = 32
 sweeps_per_chunk = 50000
 sizes = [
     4, 8, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256, 272, 288, 304, 320, 336, 352, 378
 ]
 
 [wolff]
-num_chunks = 12
+num_chunks = 6
 sweeps_per_chunk = 50000
 sizes = [
     4, 8, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256, 272, 288, 304, 320, 336, 352, 378
