@@ -1,4 +1,6 @@
 output
+figures/**/*.pdf
+*.mp4
 
 # Created by https://www.toptal.com/developers/gitignore/api/cmake,latex,clion+all,jupyternotebooks
 # Edit at https://www.toptal.com/developers/gitignore?templates=cmake,latex,clion+all,jupyternotebooks

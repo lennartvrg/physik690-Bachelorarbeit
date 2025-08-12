@@ -16,7 +16,6 @@ int run(const Config & config, std::string_view connection_string) {
 
     // Prepare the database for simulation
     while (storage->prepare_simulation(config)) {
-        tasks::Vortices<TStorage> { config, storage }.execute();
         tasks::Simulation<TStorage> { config, storage }.execute();
         tasks::Bootstrap<TStorage> { config, storage }.execute();
         tasks::Derivatives<TStorage> { config, storage }.execute();
@@ -24,6 +23,9 @@ int run(const Config & config, std::string_view connection_string) {
         std::cout << "Synchronizing workers..." << std::endl;
         storage->synchronize_workers();
     }
+
+    // Simulate single vortex for observing vortex/antivortex pairs
+    tasks::Vortices<TStorage> { config, storage }.execute();
 
     std::cout << "[Finished] Any double free error beyond this point is a problem in libpqxx. See: https://github.com/jtv/libpqxx/issues/1007" << std::endl;
     return 0;
