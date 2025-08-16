@@ -1,6 +1,23 @@
-\chapter{Implementation}
-	To simulate the two dimensional XY model with periodic boundary conditions (\cref{sec:theo:xy_model}) I implemented the numerical methods of~\cref{sec:theo:numerical_methods} in a multi-threaded \emph{C++26} program. A short guide on how to obtain and compile the sources may be found in~\cref{chap:source_code}.
+\chapter{Implementation}\label{sec:impl}
+	To simulate the two dimensional XY model with periodic boundary conditions (\cref{sec:theo:xy_model}) I implemented the numerical methods of~\cref{sec:theo:numerical_methods} in a multi-threaded \emph{C++26} program. A short guide on how to obtain and compile the sources may be found in~\cref{chap:source_code}. For the following sections these two definitions will be useful:
+	\begin{enumerate}
+		\item The term \emph{core} will refer to physical cores if a compute node has SMT disabled and to threads if SMT is enabled.
+		\item The term \emph{configuration} will refer to any combination of algorithm, lattice size $L$ and temperature $T$.
+	\end{enumerate}
 	
+	Having worked on the XY model during the \emph{physics760 - Computational Physics} class, one of shortcomings of the implementation back then was, that every compute node simulated exactly one lattice size $L$ from start to finish before saving the final results and moving on to the next lattice size. This is suboptimal for various reasons:
+	\begin{enumerate}
+		\item The program divided the temperature interval into $N$ steps. When the compute node has more cores than number of steps, the left-over cores are idle.
+		\item Only the final bootstrapped estimates were saved which becomes a problem when one wants to increase the number of...
+		\begin{enumerate}
+			\item  ... sweeps after the simulation had finished. Since the final lattice spins were not saved, the program could not continue simulation and the entire simulation had to be rerun from start to finish
+			\item ... bootstrap samples after the simulation had finished. Since the intermediate iid observables were not saved, the program could not redo the bootstrap procedure and the entire simulation had to be rerun from start to finish.
+		\end{enumerate}
+		\item When the program or the compute node crashed, only the finished lattice sizes were saved. All lattice sizes which had not yet finished had to start over once the node comes back online.
+		\item The results were saved on the disk in an SQLite database. This requires that all compute nodes have access to the same network share and that this network share is adequatly fast. 
+	\end{enumerate}
+	
+	\section{General}\label{sec:impl:overall}
 	The overall procedure for the simulation is the following:
 	\begin{enumerate}
 		\item The database is initialized and the initial set of configurations one wants to simulate are inserted into the database. A configuration is defined as the algorithm (Metropolis or Wolff), a lattice size $L$ and a temperature $T$. A detailed description on how the temperature range is scanned follows in~\cref{sec:impl:scanning}.
@@ -8,7 +25,7 @@
 			\begin{enumerate}
 				\item In the \emph{simulation} stage the worker threads fetch their next configurtion, simulates it for the configured number of sweeps and writes the observables $E$, $E^2$, $M$, $M^2$ and $\Upsilon$ back to the database. The total number of sweeps is split into $n_\text{Chunks}$ Chunks. This is discussed in more details in~\cref{sec:impl:computing}.
 				\item In the \emph{bootstrap} stage the worker threads fetch the observables for each configuration simulated beforehand. The observables get bootstrapped and the final results get written to the database.
-				\item In the \emph{derivative} phase the workers calculate the observables ($C_V$, $\chi_X$) derived from the bootstrapped results.
+				\item In the \emph{derivative} phase the workers calculate the observables ($C_V$, $\chi$) derived from the bootstrapped results.
 			\end{enumerate}
 		\item The program simulates 
 	\end{enumerate}

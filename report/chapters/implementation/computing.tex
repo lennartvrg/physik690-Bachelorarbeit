@@ -1,1 +1,13 @@
 \section{Distributed Computing}\label{sec:impl:computing}
+	The temperature scanning of~\cref{sec:impl:scanning} splits up every lattice size $L$ into $N$ steps and $I$ iterations. As the number of configuration far exceeds the core count of a single computer for any realistic choice of $L$, $N$ and $I$, the computational efforts should be scaled out across multiple compute nodes. The implementation addresses the shortcommings mentioned at the beginning of~\cref{sec:impl} and requires two kinds of nodes.
+	
+	The implementation of the simulation was designed to address the sortcomings mentioned at the beginning of~\cref{sec:impl}. The implementation needs two kinds of nodes with different hardware requirements:
+	\begin{itemize}
+		\item One or more \emph{compute} nodes which are responsible for running the simulation. These nodes should have modern high-frequency multi-core CPUs with \emph{AVX2} support (\cref{sec:impl:optimizations}) as our simulation primaraly uses the CPU and consumes very little memory\footnote{As an example: Each spin is represented by a $8$ byte double. For a lattice of size $L = 256$ we therefore use $L^2 * \SI{8}{\byte} = \SI{0.5}{\mega\byte}$. The simulation is split into chunks with $\num{50000}$ sweeps each and every collected observablere is a $\SI{8}{\byte}$ double. With $\num{6}$ observables this results in an additional $\SI{2.29}{\mega\byte}$. On a compute node with $\num{16}$ cores this results in a total memory footprint of $< \SI{50}{\mega\byte}$}.
+		\item One \emph{data} node which is responsible for orchestrating the compute nodes and storing the intermediate and final results. This nodes should be backed by a fast SSD with high capacity as the database grows over time.
+	\end{itemize}
+	
+	\subsection{Data Node}
+		The \emph{data} node is responsible for for orchestrating the compute nodes and storing the intermediate and final results. This is implemented using a  \emph{PostgreSQL}\footnote{\url{https://www.postgresql.org}} database and does not require and additional software. The database benefits from having more memory and fast NVME storage available so the hardware should be picked appropriately.
+	
+	\subsection{Compute Node}
