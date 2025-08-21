@@ -27,6 +27,7 @@
 \usepackage{derivative}
 \usepackage{minted}
 \usepackage{enumitem}
+\usepackage{pgffor}
 
 \usepackage[automark]{scrlayer-scrpage}
 \pagestyle{scrheadings}
@@ -84,6 +85,29 @@
 	\end{otherlanguage}
 }
 
+\def\lattices{4, 8, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256, 272, 288, 304, 320, 336, 352, 378}
+
+\newcommand{\Observable}[3]{\begin{figure}[H]
+		\centering
+		\begin{subfigure}{\textwidth}
+			\centering
+			\includegraphics[width=0.8\textwidth]{../figures/#1/#2/#3.pdf}
+			\caption{Observable}
+		\end{subfigure}
+		\par\bigskip
+		\begin{subfigure}{\textwidth}
+			\centering
+			\includegraphics[width=0.8\textwidth]{../figures/#1/#2/#3_Autocorrelation.pdf}
+			\caption{Integrated Autocorrelation}
+		\end{subfigure}
+		\caption{#2 per spin using the #1 algorithm for $L=$#3}
+\end{figure}}
+
+\newcommand{\ObservableAlone}[3]{\begin{figure}[H]
+		\centering
+		\includegraphics[width=0.8\textwidth]{../figures/#1/#2/#3.pdf}
+		\caption{#2 per spin using the #1 algorithm for $L=$#3}
+\end{figure}}
 
 \begin{document}
 	\frontmatter
@@ -103,16 +127,23 @@
 		
 		% Implementation
 		\input{chapters/implementation/general}
-		\input{chapters/implementation/scanning}
-		\input{chapters/implementation/computing}
-		\input{chapters/implementation/optimizations}
-		
+			\input{chapters/implementation/procedure}
+				\input{chapters/implementation/scanning}
+				\input{chapters/implementation/computing}
+				\input{chapters/implementation/tasks}
+			\input{chapters/implementation/optimizations}
+			
+			% Results
+			\input{chapters/results/results}
+			
 		\cleardoubleemptypage
 		
 	\appendix
-		\pagenumbering{Alph}
 		\input{chapters/appendix/source_code}
-
+		\input{chapters/appendix/config}
+		\input{chapters/appendix/schema}
+		\input{chapters/appendix/observables}
+		
 	\backmatter\pagenumbering{Roman}
 		\listoffigures
 		\bibliography{refs}

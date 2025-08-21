@@ -1,13 +1,15 @@
-\section{Distributed Computing}\label{sec:impl:computing}
+\subsection{Distributed Computing}\label{sec:impl:computing}
 	The temperature scanning of~\cref{sec:impl:scanning} splits up every lattice size $L$ into $N$ steps and $I$ iterations. As the number of configuration far exceeds the core count of a single computer for any realistic choice of $L$, $N$ and $I$, the computational efforts should be scaled out across multiple compute nodes. The implementation addresses the shortcommings mentioned at the beginning of~\cref{sec:impl} and requires two kinds of nodes.
 	
-	The implementation of the simulation was designed to address the sortcomings mentioned at the beginning of~\cref{sec:impl}. The implementation needs two kinds of nodes with different hardware requirements:
-	\begin{itemize}
-		\item One or more \emph{compute} nodes which are responsible for running the simulation. These nodes should have modern high-frequency multi-core CPUs with \emph{AVX2} support (\cref{sec:impl:optimizations}) as our simulation primaraly uses the CPU and consumes very little memory\footnote{As an example: Each spin is represented by a $8$ byte double. For a lattice of size $L = 256$ we therefore use $L^2 * \SI{8}{\byte} = \SI{0.5}{\mega\byte}$. The simulation is split into chunks with $\num{50000}$ sweeps each and every collected observablere is a $\SI{8}{\byte}$ double. With $\num{6}$ observables this results in an additional $\SI{2.29}{\mega\byte}$. On a compute node with $\num{16}$ cores this results in a total memory footprint of $< \SI{50}{\mega\byte}$}.
-		\item One \emph{data} node which is responsible for orchestrating the compute nodes and storing the intermediate and final results. This nodes should be backed by a fast SSD with high capacity as the database grows over time.
-	\end{itemize}
+	\subsubsection{Data Node}\label{sec:impl:computing:data}
+		The \emph{data} node is responsible for for orchestrating the compute nodes and storing the intermediate and final results. This is realized using a  \emph{PostgreSQL}\footnote{\url{https://www.postgresql.org}} database and does not require any additional software. The database benefits from having more memory and fast NVME storage available so the hardware should be picked appropriately.
+		
+		The schema for the \emph{PostgreSQL} database can be seen in~\cref{chap:schema}. All relevent database entities are linked by foreign keys and unique constraints were added to ensure that every configuration is only simulated exactly once.
+		
+		\paragraph{SQLite}
+			During development an \emph{SQLite} database was used instead of PostgreSQL. This removed the need for a separate data node as all compute nodes can use a SQLite database on a shared network drive. This is not recommended for environments with slow network connection, slow drive speeds or many compute nodes.  This implementation is still fully functional and can be swapped out using the configuration file if needed (see~\cref{chap:config}).
 	
-	\subsection{Data Node}
-		The \emph{data} node is responsible for for orchestrating the compute nodes and storing the intermediate and final results. This is implemented using a  \emph{PostgreSQL}\footnote{\url{https://www.postgresql.org}} database and does not require and additional software. The database benefits from having more memory and fast NVME storage available so the hardware should be picked appropriately.
-	
-	\subsection{Compute Node}
+	\subsubsection{Compute Node}\label{sec:impl:computing:compute}
+		One or more \emph{compute} nodes are required to run the simulation. These nodes should have modern high-frequency multi-core CPUs with \emph{AVX2} support (\cref{sec:impl:optimizations}) as our simulation primaraly uses the CPU and consumes very little memory.
+		
+		The compute nodes only need internal network access to the \emph{data} node to access the \emph{PostgreSQL} instance. To automatically install all required dependencies and compile the program a \emph{CloudInit}\footnote{\url{https://cloudinit.readthedocs.io/en/latest/index.html}} configuraton file can be found in the repository\footnote{\url{https://github.com/lennartvrg/physik690-Bachelorarbeit/blob/main/cloud-config.yaml}}. This also registers the program as a \emph{systemd}\footnote{\url{https://systemd.io/}} service which provides resilliency as it restarts the service on when exits with an error code\footnote{\url{https://github.com/lennartvrg/physik690-Bachelorarbeit/blob/main/bachelor.service}}.
