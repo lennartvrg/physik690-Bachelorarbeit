@@ -1,13 +1,8 @@
 \section{Numerical Methods}\label{sec:theo:numerical_methods}
-	As stated in the introduction in~\cref{chap:introduction}, the goal is to simulate the two dimensional XY model with periodic boundary conditions using the Metropolis-Hastings and the Wolff-Cluster algorithms. In the following section I will present the concepts needed for understanding and implementing the simulation.
-	
-	\subsection{Importance Sampling}
-		
-%		
-	\subsection{Markov Chain}
+	As stated in the introduction in~\cref{chap:introduction}, the goal is to simulate the two dimensional XY model using the Metropolis-Hastings and the Wolff-Cluster algorithms. In the following section I will present the algorithms and concepts needed for understanding and implementing the simulation.
 
-	\subsection{Metropolis Algorithm}
-	
+	\subsection{Metropolis Algorithm}\label{sec:theo:metropolis}
+		
 	
 		The overall procedure for the lattice is as follows:
 		\begin{enumerate}
@@ -36,7 +31,7 @@
 		\end{equation}
 		which is an idempotent operation $R(\vec{r})^2=1$ \cite[eq. 3]{wolff}.
 	
-		The overall procedure for the Wolff cluster algorithm was taken from~\cite[p. 361]{wolff} with the addition of~\cref{wolf_loop}. This was done, as the probability of a site joining the lattice is lower for unordered states which emerge at hight temperatures. Consequently the average cluster size tends towards $1$ in those states. This results in a very uneven distribution of potential updates (\emph{marked} sites in the algorithm procedure). At low temperatures many sites get visited and potentionally updated while at high temperature as few as one site gets updated. To mitigate this, I introduce~\cref{wolf_loop} as an additional step which should ensure that even at high temperature a sufficient number of potential updates are made.
+		The overall procedure for the Wolff cluster algorithm was taken from~\cite[p. 361]{wolff} with the addition of~\cref{wolf_loop}. This was done, as the probability of a site joining the lattice is lower for unordered states which emerge at hight temperatures. Consequently the average cluster size tends towards $1$ in those states. This results in a very uneven distribution of potential updates (\emph{marked} sites in the algorithm procedure). At low temperatures many sites get visited and potentionally updated while at high temperature as few as one site gets updated. To mitigate this, I introduce~\cref{wolf_loop} as an additional step which ensures that even at high temperature a sufficient number of potential updates are made.
 		\begin{enumerate}
 			\item Calculate $E$, $M$ and $\Upsilon$ for the initial lattice configuration. Here the initial configuration is a cold state where $\sigma_i = 0$ for all sites $i$.
 			\item \label{wolf_loop} Perform the following until we marked $L^2$ lattice sites in total:
