@@ -378,8 +378,8 @@ bool PostgresStorage::prepare_simulation(const Config config) {
 								const auto [xs_temperature, diff] = *pair;
 
 								// Determine new bounds around the temperature where xs is max
-								const auto min_temperature = xs_temperature - 2 * diff;
-								const auto max_temperature = xs_temperature + 2 * diff;
+								const auto min_temperature = xs_temperature - 3 * diff;
+								const auto max_temperature = xs_temperature + 3 * diff;
 
 								// Add configurations
 								for (const auto temperature : utils::sweep_temperature(min_temperature, max_temperature, config.temperature_steps, false)) {
