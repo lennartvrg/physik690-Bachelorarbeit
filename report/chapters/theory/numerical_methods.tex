@@ -40,7 +40,7 @@
 				\item Pick a random lattice site $x$ as the first element of the cluster.
 				\item Flip the spin at the initial lattice site $\sigma_x \rightarrow R(\vec{r}) \sigma_x$ and mark site $x$.
 				\item \label{wolff_step} Visit all direct unmarked neighbours $y$ of $x$ and add them to the cluster with propbability
-					\begin{equation}
+					\begin{equation}\label{eq:wolff}
 						P(\sigma_x, \sigma_y) = 1 - \exp(\min[0, 2 \beta (\vec{r}\cdot\vec{\sigma_x}) (\vec{r}\cdot\vec{\sigma_y})])
 					\end{equation}
 					and calculate $\Delta E$, $\Delta M$ and $\Delta \Upsilon$ for the proposed new state.
