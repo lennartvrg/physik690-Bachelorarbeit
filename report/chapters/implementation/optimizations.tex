@@ -1,23 +1,18 @@
 \section{Optimizations}\label{sec:impl:optimizations}
-	Apart from distributing the workload across multiple threads and nodes, there are also some optimizations which can be made to improve the performance on a single thread.
+	Apart from distributing the workload across multiple threads and nodes, some optimizations can be made to improve performance on a single thread.
 	
 	\paragraph{SIMD Instructions}\label{sec:impl:optimizations:simd}
-		As already introduced in the definition of the Metropolis (\cref{sec:theo:metropolis}) and Wolff (\cref{sec:theo:wolff_cluster}) algorithms, it is computationally more sensible to calculate the delte energy/magnetization/helicity modulus a proposed spin update would entail instead of recalculating the observable for the entire lattice. In our two dimensional lattice model with nearest neighbour approximation this means that only the four direct neighbours of a spin $\sigma_i$ contribute in the calculation.
+		As already introduced in the definitions of the Metropolis (\cref{sec:theo:metropolis}) and Wolff (\cref{sec:theo:wolff_cluster}) algorithms, it is computationally more sensible to calculate the delta energy/magnetization/helicity modulus that a proposed spin update would entail, instead of recalculating the observable for the entire lattice. In our two-dimensional lattice model with nearest neighbour approximation, this means that only the four direct neighbours of a spin $\sigma_i$ contribute to the calculation.
 			
-		As many modern day CPU have the AVX2\footnote{\url{https://edc.intel.com/content/www/us/en/design/ipla/software-development-platforms/client/platforms/alder-lake-desktop/12th-generation-intel-core-processors-datasheet-volume-1-of-2/009/intel-advanced-vector-extensions-2-intel-avx2/}} instruction sets enabled, which allows to perform standard mathematical operations on vectors of four scalar simultaneously, we can use this to improve the performance of our implementation. AVX2 in itself does not provide intrinsics to the operations ($\sin, \cos$) need. Therefore, we will also use the \emph{Intel\textsuperscript{\tiny\textregistered} Short Vector Math Library} (SVML\footnote{\url{https://www.intel.com/content/www/us/en/docs/cpp-compiler/developer-guide-reference/2021-8/intrinsics-for-short-vector-math-library-ops.html}}) which provide intrinsics that generate an optimized sequence of intrinsics.
-
-	\paragraph{Discrete-Fourier-Transform}\label{sec:impl:optimizations:dft}
+		As many modern-day CPUs have the AVX2\footnote{\url{https://edc.intel.com/content/www/us/en/design/ipla/software-development-platforms/client/platforms/alder-lake-desktop/12th-generation-intel-core-processors-datasheet-volume-1-of-2/009/intel-advanced-vector-extensions-2-intel-avx2/}} instruction set enabled, which allows us to perform standard mathematical operations on vectors of four scalars simultaneously, we can use this to improve the performance of our implementation. \emph{AVX2} in itself does not provide intrinsics for the operations ($\sin, \cos$) that are needed. Therefore, we will also use the \emph{Intel\textsuperscript{\tiny\textregistered} Short Vector Math Library} (SVML\footnote{\url{https://www.intel.com/content/www/us/en/docs/cpp-compiler/developer-guide-reference/2021-8/intrinsics-for-short-vector-math-library-ops.html}}), which provides intrinsics that generate an optimized sequence of intrinsics.
 		
-		
-	\paragraph{Date Alignment}
-		To optimize data access for our SIMD instructions (\cref{sec:impl:optimizations:simd}) and the DFT acceleration (\cref{sec:impl:optimizations:dft}), the internal \mintinline{c++}{std::vector<double_t>} storing the spins is aligned in $32$ byte.
+		To optimize data access for our SIMD instructions, the internal \mintinline{c++}{std::vector<double_t>} storing the spins is aligned on a $32$-byte boundary.
 		
 	\paragraph{Compiler Flags}
-		The program uses the \mintinline{bash}{-march=native} compiler flag and should therefore be compiled on a system with the same or very similar CPU as the compute nodes. Additionally, the \mintinline{bash}{-ffast-math} flag was used which sacrifices ISO compliance for execution speed. While no systematic testing was made, the performance improvement on the development machine was $\approx \SI{20}{\percent}$ better with no observable loss in numerical results. 
-		\todo{Check the percentage again. Might be of by a few percent}
+		The program uses the \mintinline{bash}{-march=native} compiler flag and should therefore be compiled on a system with the same or very similar CPU as the compute nodes. Additionally, the \mintinline{bash}{-ffast-math} flag was used, which sacrifices ISO compliance for execution speed. Although no systematic testing was conducted, the performance improvement on the development machine was $\approx \SI{20}{\percent}$ better, with no observable loss in numerical results. 
 	
 	\paragraph{Intel Compiler}
-		We also wanted to try the \emph{Intel\textsuperscript{\tiny\textregistered}} oneAPI DPC++/C++ compiler as the manufacturer claims its superiority over \emph{gcc} in HPC workloads. No systematic testing was done but on the development machine (AMD Ryzen 1700) an $\SI{6}{\percent}$ reduction of the total wall-time was observed. Tests on a second machine (\emph{Intel\textsuperscript{\tiny\textregistered} i7-10710U}) yielded in an $\SI{14}{\percent}$ improvement over $\emph{gcc 15}$.
+		We also wanted to try the \emph{Intel\textsuperscript{\tiny\textregistered}} oneAPI DPC++/C++ compiler as the manufacturer claims it offers superiority over \emph{gcc} in HPC workloads. No systematic testing was conducted, but on the development machine (AMD Ryzen 1700) a $\SI{6}{\percent}$ reduction of the total wall-time was observed. Tests on a second machine (\emph{Intel\textsuperscript{\tiny\textregistered} i7-10710U}) yielded a $\SI{14}{\percent}$ improvement over $\emph{gcc 15}$.
 			
 	
 

@@ -1,18 +1,18 @@
 \chapter{Implementation}\label{sec:impl}
-	To simulate the two dimensional XY model with periodic boundary conditions (\cref{sec:theo:xy_model}) I implemented the numerical methods of~\cref{sec:theo:numerical_methods} in a multi-threaded \emph{C++26} program. A short guide on how to obtain and compile the sources may be found in~\cref{chap:source_code}. For the following sections these two definitions will be useful:
+	To simulate the two-dimensional XY model with periodic boundary conditions (\Cref{sec:theo:xy_model}), I implemented the numerical methods of~\Cref{sec:theo:numerical_methods} in a multi-threaded \emph{C++26} program. A brief guide on how to obtain and compile the sources can be found in~\cref{chap:source_code}. For the following sections, these two definitions will be helpful:
 	\begin{enumerate}
-		\item The term \emph{core} will refer to physical cores if a compute node has SMT disabled and to threads if SMT is enabled.
-		\item The term \emph{configuration} will refer to any combination of algorithm, lattice size $L$ and temperature $T$.
+		\item The term \emph{core} refers to physical cores when a compute node has SMT disabled and to threads when SMT is enabled.
+		\item The term \emph{configuration} will refer to any combination of algorithm, lattice size $L$, and temperature $T$.
 	\end{enumerate}
 	
-	Having worked on the XY model during the \emph{physics760 - Computational Physics} class, one of shortcomings of the implementation back then was, that every compute node simulated exactly one lattice size $L$ from start to finish before saving the final results and moving on to the next lattice size. This is suboptimal for various reasons:
+	Having worked on the XY model during the \emph{physics760 - Computational Physics} class, one of the shortcomings of the implementation back then was that every compute node simulated exactly one lattice size $L$ from start to finish before saving the final results and moving on to the next lattice size. This procedure is suboptimal for various reasons:
 	\begin{enumerate}
-		\item \label{shortcomings:cores} The program divided the temperature interval into $N$ steps. When the compute node has more cores than number of steps, the left-over cores are idle.
-		\item Only the final bootstrapped estimates were saved which becomes a problem when one wants to increase the number of...
+		\item \label{shortcomings:cores} The program divided the temperature interval into $N$ steps. When the compute node has more cores than the number of steps, the left-over cores are idle.
+		\item Only the final bootstrapped estimates were saved, which becomes a problem when one wants to increase the number of...
 		\begin{enumerate}
-			\item \label{shortcomings:sweeps}  ... sweeps after the simulation had finished. Since the final lattice spins were not saved, the program could not continue the simulation and the entire simulation had to be rerun from start to finish
-			\item \label{shortcomings:bootstrap} ... bootstrap samples after the simulation had finished. Since the iid observables were not saved, the program could not redo the bootstrap procedure and the entire simulation had to be rerun from start to finish.
+			\item \label{shortcomings:sweeps}  ... sweeps after the simulation had finished. Since the final lattice spins were not saved, the program could not continue the simulation, and the entire simulation had to be rerun from start to finish
+			\item \label{shortcomings:bootstrap} ... bootstrap samples after the simulation had finished. Since the iid observables were not saved, the program could not redo the bootstrap procedure, and the entire simulation had to be rerun from scratch.
 		\end{enumerate}
-		\item \label{shortcomings:crashed} When the program or the compute node crashed, only the finished lattice sizes were saved. All lattice sizes which had not yet finished had to start over once the node comes back online.
-		\item \label{shortcomings:sqlite} The results were saved on the disk in an SQLite database. This requires that all compute nodes have access to the same network share and that this network share is adequatly fast. 
+		\item \label{shortcomings:crashed} When the program or the compute node crashed, only the finished lattice sizes were saved. All lattice sizes that had not yet finished had to start over once the node came back online.
+		\item \label{shortcomings:sqlite} The results were saved on the disk in an SQLite database, which requires that all compute nodes have access to the same network share and that this network share is adequately fast.
 	\end{enumerate}

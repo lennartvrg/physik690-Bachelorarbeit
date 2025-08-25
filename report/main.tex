@@ -46,7 +46,7 @@
 %\AddToHook{cmd/section/before}{\clearpage}
 \graphicspath{ {../figures/} }
 
-\title{Studying the Kosterlitz-Thouless Transition of the two dimensional XY model using Monte Carlo methods}
+\title{Studying the Kosterlitz-Thouless Transition of the two-dimensional XY model using Monte Carlo methods}
 \author{Lennart Voorgang}
 \date{}
 \publishers{\LARGE
@@ -65,7 +65,7 @@
 }
 \lowertitleback{%
 	\begin{otherlanguage}{ngerman}
-		I hereby declare that this thesis was formulated by myself and that no sources or tools other than those cited were used.
+		I hereby declare that this thesis was formulated by me and that no sources or tools other than those cited were used.
 		
 		\vspace*{6ex minus 0.5ex}
 		
@@ -88,26 +88,25 @@
 
 \def\lattices{4, 8, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256, 272, 288, 304, 320, 336, 352, 378}
 
-\newcommand{\Observable}[3]{\begin{figure}[H]
+\newcommand{\Observable}[3]{\begin{figure}[htbp]
 		\centering
-		\begin{subfigure}{\textwidth}
-			\centering
-			\includegraphics[width=0.8\textwidth]{../figures/#1/#2/#3.pdf}
-			\caption{Observable}
-		\end{subfigure}
-		\par\bigskip
-		\begin{subfigure}{\textwidth}
-			\centering
-			\includegraphics[width=0.8\textwidth]{../figures/#1/#2/#3_Autocorrelation.pdf}
-			\caption{Integrated Autocorrelation}
-		\end{subfigure}
-		\caption{#2 per spin using the #1 algorithm for $L=$#3}
+		\includegraphics[width=0.8\textwidth]{../figures/#1/#2.pdf}
+		\caption[Temperature dependence of the #3 per spin (#1)]{Temperature dependence of the #3 per spin using the #1 algorithm for lattice sizes $L \in \{4, 32, 128, 352\}$}
+		\label{fig:obs:#1:#2}
 \end{figure}}
 
-\newcommand{\ObservableAlone}[3]{\begin{figure}[H]
+\newcommand{\Autocorrelation}[3]{\begin{figure}[htbp]
 		\centering
-		\includegraphics[width=0.8\textwidth]{../figures/#1/#2/#3.pdf}
-		\caption{#2 per spin using the #1 algorithm for $L=$#3}
+		\includegraphics[width=0.8\textwidth]{../figures/#1/#2_Autocorrelation.pdf}
+		\caption[Autocorrelation function $\Gamma(\Delta t)$ of the #3 per spin (#1)]{Autocorrelation function $\Gamma(\Delta t)$ of the #3 per spin using the #1 algorithm}
+		\label{fig:obs:#1:#2:autocorrelation}
+\end{figure}}
+
+\newcommand{\IntegratedAutocorrelation}[3]{\begin{figure}[htbp]
+		\centering
+		\includegraphics[width=0.8\textwidth]{../figures/#1/#2_IntegratedAutocorrelation.pdf}
+		\caption[Integrated autocorrelation time $\tau$ of the #3 per spin (#1)]{Integrated autocorrelation time $\tau$ of the #3 per spin using the #1 algorithm}
+		\label{fig:obs:#1:#2:integrated}
 \end{figure}}
 
 \begin{document}
@@ -139,6 +138,7 @@
 			\input{chapters/results/results}
 			\input{chapters/results/energy}
 			\input{chapters/results/magnetization}
+			\input{chapters/results/vortex}
 			
 			% Conclusion
 			\input{chapters/conclusion/conclusion}

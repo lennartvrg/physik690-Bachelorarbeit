@@ -1,61 +1,78 @@
 \section{Numerical Methods}\label{sec:theo:numerical_methods}
-	As stated in the introduction in~\cref{chap:introduction}, the goal is to simulate the two dimensional XY model using the Metropolis-Hastings and the Wolff-Cluster algorithms. In the following section I will present the algorithms and concepts needed for understanding and implementing the simulation.
+	As stated in the introduction in~\Cref{chap:introduction}, the goal is to simulate the two-dimensional XY model using the Metropolis-Hastings and the Wolff-Cluster algorithms. In the following sections, we will present the algorithms and concepts needed for understanding and implementing the simulation.
 
 	\subsection{Metropolis Algorithm}\label{sec:theo:metropolis}
-		
-	
-		The overall procedure for the lattice is as follows:
+		The fundamental problem we need to solve is that we want to generate configurations of our system with probability $P(\sigma) = \exp{(-\beta H[\sigma])}/Z$. The problem is that the partition sum $Z$ is not easy to calculate. As shown by~\citet{metropolis}, it is sufficient to calculate the ratio of probabilities instead
+		\begin{equation}
+			\frac{P(y)}{P(x)} = \exp{(-\beta(H[y] - H[x]))} = \exp{(-\beta \Delta H)}.
+		\end{equation}
+		This procedure generates a Markov chain of dependent configurations. The overall procedure for the lattice is as follows:
 		\begin{enumerate}
-			\item Calculate $E$, $M$ and $\Upsilon$ for the initial lattice configuration.
+			\item Calculate $E$, $M$, and $\Upsilon$ for the initial lattice configuration.
 			\item Perform a lattice sweep by iterating over all lattice sites. For every site $i$ do:
 			\begin{enumerate}
 				\item Propose a new angle $\theta_i \in [0,2\pi)$ from a uniform distribution.
-				\item Calculate $\Delta H = \Delta E$, $\Delta M$ and $\Delta \Upsilon$ for the proposed new state.
+				\item Calculate $\Delta H = \Delta E$, $\Delta M$, and $\Delta \Upsilon$ for the proposed new state.
 				\item Accept or reject state with probability $P = \min{(1, \exp{(-\beta\Delta H)})}$.
 			\end{enumerate}
-			\item Update the observables $E \mathrel{{+}{=}} \Delta E$, $M \mathrel{{+}{=}} \Delta M$ and $\Upsilon \mathrel{{+}{=}} \Delta \Upsilon$ and add them to the result set.
+			\item Update the observables $E$, $M$, and $\Upsilon$ by adding $\Delta E$, $\Delta M$, and $\Delta \Upsilon$, respectively, and add them to the result set.
 			\item Repeat from 2. for a total of $N$ sweeps.
 		\end{enumerate}
 		
 	\subsection{Critical Slowing Down}\label{sec:theo:critical_slowing_down}
-		While the Metropolis-Hastings algorithms works well for low and high temperatures it has its problems near the critical temperature. 
+		While the Metropolis-Hastings algorithm performs well for both low and high temperatures, it encounters issues near the critical temperature.
 		
 	\subsection{Wolff Cluster Algorithm}\label{sec:theo:wolff_cluster}
-		As discussed in~\cref{sec:theo:critical_slowing_down} the Metropolis-Hastings algorithm suffers severe critical slowing down effects. In a desire to mititage such effect~\cite{sw} introduced a multi-cluster Monte Carlo algorithm for the Potts spin models \enquote{giving a highly efficient method of simulation for large systems near criticality} (\cite{sw}).
+		As discussed in~\Cref{sec:theo:critical_slowing_down}, the Metropolis-Hastings algorithm is prone to severe critical slowing-down effects. In a desire to mitigate such effects,~\cite{sw} introduced a multi-cluster Monte Carlo algorithm for the Potts spin model, \enquote{giving a highly efficient method of simulation for large systems near criticality} (\cite{sw}).
 		
-		Adjacent to the multi-cluster Swendson and Wang algorithm, the Wollf algorithm shows similar improvements with regards to the critical exponent while only utilizing a single cluster which makes implementations more straight forward.
+		Adjacent to the multi-cluster Swendson and Wang algorithm, the Wollf algorithm exhibits similar improvements in the critical exponent, while utilizing only a single cluster, which makes implementations more straightforward.
 		
-		The key insight is that the Ising spin-flip operation $\sigma_i \rightarrow -\sigma_i$ needs to be generalized to the $U(2)$ symmetry of the XY model. \cite{wolff} defines the spin-flip as the reflectionalong the hyperplane orthogonal to an arbritarly choosen unit vector $\vec{r}$
+		The key insight is that the Ising spin-flip operation $\sigma_i \rightarrow -\sigma_i$ needs to be generalized to the $U(2)$ symmetry of the XY model. \cite{wolff} defines the spin-flip as the reflection along the hyperplane orthogonal to an arbitrarily chosen unit vector $\vec{r}$
 		\begin{equation}
 			R(\vec{r}) \sigma_i = \sigma_i - 2 (\sigma_i \cdot \vec{r}) \vec{r} 
 		\end{equation}
 		which is an idempotent operation $R(\vec{r})^2=1$ \cite[eq. 3]{wolff}.
 	
-		The overall procedure for the Wolff cluster algorithm was taken from~\cite[p. 361]{wolff} with the addition of~\cref{wolf_loop}. This was done, as the probability of a site joining the lattice is lower for unordered states which emerge at hight temperatures. Consequently the average cluster size tends towards $1$ in those states. This results in a very uneven distribution of potential updates (\emph{marked} sites in the algorithm procedure). At low temperatures many sites get visited and potentionally updated while at high temperature as few as one site gets updated. To mitigate this, I introduce~\cref{wolf_loop} as an additional step which ensures that even at high temperature a sufficient number of potential updates are made.
+		The overall procedure for the Wolff cluster algorithm was adapted from~\citet[p. 361]{wolff} with the addition of~\cref{wolf_loop}. The step was added, as the probability of a site joining the lattice is lower for unordered states that emerge at high temperatures. Consequently, the average cluster size tends towards $1$ in those states. This results in a very uneven distribution of potential updates (\emph{marked} sites in the algorithm procedure). At low temperatures, many sites get visited and potentially updated, while at high temperatures, as few as one site gets updated. To mitigate this, we propose~\cref{wolf_loop} as an additional step that ensures a sufficient number of potential updates are made, even at high temperatures.
 		\begin{enumerate}
-			\item Calculate $E$, $M$ and $\Upsilon$ for the initial lattice configuration. Here the initial configuration is a cold state where $\sigma_i = 0$ for all sites $i$.
-			\item \label{wolf_loop} Perform the following until we marked $L^2$ lattice sites in total:
+			\item Calculate $E$, $M$, and $\Upsilon$ for the initial lattice configuration. Here, the initial setup is a cold state where $\sigma_i = 0$ for all sites $i$.
+			\item \label{wolf_loop} Perform the following until we have marked $L^2$ lattice sites in total:
 			\begin{enumerate}
-				\item Choose a random two dimensional unit vector $\vec{r}$ as the reflection vector.
-				\item Pick a random lattice site $x$ as the first element of the cluster.
+				\item Choose a random two-dimensional unit vector $\vec{r}$ as the reflection vector.
+				\item Select a random lattice site $x$ as the first element of the cluster.
 				\item Flip the spin at the initial lattice site $\sigma_x \rightarrow R(\vec{r}) \sigma_x$ and mark site $x$.
-				\item \label{wolff_step} Visit all direct unmarked neighbours $y$ of $x$ and add them to the cluster with propbability
+				\item \label{wolff_step} Visit all direct unmarked neighbours $y$ of $x$ and add them to the cluster with probability:
 					\begin{equation}\label{eq:wolff}
 						P(\sigma_x, \sigma_y) = 1 - \exp(\min[0, 2 \beta (\vec{r}\cdot\vec{\sigma_x}) (\vec{r}\cdot\vec{\sigma_y})])
 					\end{equation}
-					and calculate $\Delta E$, $\Delta M$ and $\Delta \Upsilon$ for the proposed new state.
-				\item If site $y$ was accepeted into the cluster its spin is flipped $\sigma_y \rightarrow R(\vec{r}) \sigma_y$.
-				\item Site $y$ becomes the new $x$ and continue from~\cref{wolff_step} until there are no more sites to add to the cluster.
+					and calculate $\Delta E$, $\Delta M$, and $\Delta \Upsilon$ for the proposed new state.
+				\item If site $y$ is accepted into the cluster, its spin is flipped $\sigma_y \rightarrow R(\vec{r}) \sigma_y$.
+				\item Site $y$ becomes the new $x$, and we continue from~\cref{wolff_step} until there are no more sites to add to the cluster.
 			\end{enumerate}
-			\item Update the observables $E \mathrel{{+}{=}} \Delta E$, $M \mathrel{{+}{=}} \Delta M$ and $\Upsilon \mathrel{{+}{=}} \Delta \Upsilon$ and add them to the result set.
+			\item Update the observables $E$, $M$, and $\Upsilon$ by adding $\Delta E$, $\Delta M$, and $\Delta \Upsilon$, respectively, and add them to the result set.
 			\item Continue from~\cref{wolf_loop} until the exit condition is fulfilled.
 		\end{enumerate}
 		
-		
-		
+	\subsection{Autocorrelation}
+		The configurations obtained from that procedure are dependent on the configurations preceding them.  To measure this correlation, one can introduce the autocorrelation
+		\begin{equation}
+			C(\Delta t) = \langle(O(t) - \mu_O)(O(t + \Delta t) - \mu_O) \rangle
+		\end{equation}
+		(\citet[eq. (41)]{bootstrap}) and, to get a size-invariant measure, the normalized autocorrelation
+		\begin{equation}
+			\Gamma(\Delta t) = \frac{C(\Delta t)}{C(0)}
+		\end{equation}
+		(\citet[eq. (43)]{bootstrap}) with $\Delta t$ being the step between samples, $O$ an observable, and $\mu_O$ the mean of that observable. This measure decays exponentially with the timescale $\tau$, being the point where samples are no longer correlated
+		\begin{equation}
+			\tau = \frac{1}{2} + \sum^{T}_{t=1}{\Gamma(t)}
+		\end{equation}
+		(\citet[eq. (46)]{bootstrap}) where we cut off the summation when it first crosses zero. In the implementation, we use a Discrete Fourier Transform to accelerate this step.
 	
-	\subsection{Bootstrapping}
-		Since the Metropolis-Hastings algorithm scales with the number of lattice sites, it is computationally impractical to run the Metropolis-Hastings algorithm for long timescales. Given that we have an observable whose iid samples follow a Gaussian distribution and we already have \enquote{enough} iid samples which cover enough of the possible configuration space, we can then use bootstrapping to generate more samples (\citet{bootstrap}).
+	\subsection{Thermalization and Blocking}\label{sec:blocking}
+	To obtain independent and identically distributed (iid) samples, we discard the first $\lceil 3\tau \rceil$ values in a thermalization step. WeWe then perform a blocking step, where we divide the remaining samples into chunks of size $\lceil \tau \rceil$ and calculate the mean over each chunk. All further processing will use these blocked samples, which are now iid.
+	
+	\subsection{Bootstrapping}\label{sec:bootstrap}
+		Since the Metropolis-Hastings algorithm scales with the number of lattice sites, it is computationally impractical to run the Metropolis-Hastings algorithm for long timescales. Given that we have an observable whose iid samples follow a Gaussian distribution and we already have \enquote{enough} iid samples that cover a sufficient portion of the possible configuration space, we can then use bootstrapping to generate additional samples (\citet{bootstrap}).
 		\begin{enumerate}
 			\item Collect $B$ intermediate means by repeating the following:
 			\begin{enumerate}
