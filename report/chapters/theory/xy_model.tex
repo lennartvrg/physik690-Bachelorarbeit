@@ -8,44 +8,44 @@
 				\cos{\theta_i} \\ \sin{\theta_i}
 			\end{pmatrix}
 		\end{equation}
-		parametrized by the angle $\theta_i \in [0,2\pi)$. The Hamiltonian gives the total energy of the system
+		parametrized by the angle $\theta_i \in [0,2\pi)$. The Hamiltonian gives the total energy of the system as
 		\begin{equation}
 			H = -J \sum_{\langle i, j \rangle}{s_i \cdot s_j} = -J \sum_{\langle i, j \rangle}{\cos(\Delta \theta)}
 		\end{equation}
-		where $\langle i,j \rangle$ are neighbouring spins, $\Delta \theta = \theta_i - \theta_j$ is the angle between two neighbouring spins, and $J>0$ is the interaction strength. The partition function for such a system is given by
+		where $\langle i,j \rangle$ are neighbouring spins, $\Delta \theta = \theta_i - \theta_j$ is the angle between two neighbouring spins, and $J>0$ is the interaction strength for the ferromagnetic case. The partition function for such a system is given by
 		\begin{equation}
 			Z = \sum{\exp{-\beta H}} = \sum{\exp{ \left( \beta J \sum_{\langle i, j \rangle}{\cos(\Delta \theta)} \right) }}
 		\end{equation}
 		with $\beta = (k_B T)^{-1}$ so that $[\beta] = \si{\per\joule}$ and $k_B$ being the Boltzmann constant. The coupling constant $J$ is set to $J = \SI{1}{\joule}$ so that $\beta J$ is dimensionless and $[H] = \si{\joule}$. 
 		
 	\subsection{Observables}
-		As the observables of the XY model scale with the number of lattice sites, it is generally more insightful to study the observables per spin. This way, the finite-size scaling of the observables can be better observed.
+		For our studies, we will be using a square two-dimensional lattice with side length $L$, nearest neighbour approximation, and periodic boundary conditions, which, topologically, forms a taurus. As the observables of the XY model scale with the number of lattice sites, it is generally more insightful to study the observables per spin. This way, the finite-size scaling of the observables can be observed better.
 	
-		\paragraph{Energy per Spin}
-			The total energy of the system is given by its Hamiltonian. For the two-dimensional lattice with side length $L$, periodic boundary conditions, and nearest neighbour approximation, the total energy is thus
+		\paragraph{Energy per spin}
+			The total energy of the system is given by its Hamiltonian and thus
 			\begin{equation}\label{eq:energy}
 				E = - \frac{1}{L^2} \sum_{\langle i, j \rangle}{\cos(\Delta \theta)}.
 			\end{equation}
 		
-		\paragraph{Specific Heat per Spin}
+		\paragraph{Specific heat per spin}
 			In addition to the energy per spin $E$, one can also record $E^2$ and derive the specific heat capacity of the system
 			\begin{equation}\label{eq:specific_heat}
 				C_V = \frac{\langle E^2 \rangle - \langle E \rangle^2}{T^2}.
 			\end{equation}
 		
-		\paragraph{Magnetization per Spin}
+		\paragraph{Magnetization per spin}
 			The total absolute magnetization per spin for a system with side length $L$ is given by
 			\begin{equation}\label{eq:magnetization}
 				\lvert M \rvert^2 = \frac{1}{L^2} \left( (\sum{\cos\theta_i})^2 + (\sum{\sin\theta_i})^2 \right).
 			\end{equation}
 		
-		\paragraph{Magnetic Susceptibility}
+		\paragraph{Magnetic susceptibility}
 			Similar to the specific heat, the magnetic susceptibility of the system can be derived as
 			\begin{equation}\label{eq:magnetic_suceptibility}
 				\chi = \frac{\langle M^2 \rangle - \langle M \rangle^2}{T}.
 			\end{equation}
 		
-		\paragraph{Helicity Modulus per Spin}
+		\paragraph{Helicity modulus per spin}
 			According to~\cite{teitel_helicity}, one can also derive the \emph{spin wave stiffness} or \emph{helicity modulus} $\Upsilon$, which \textquote{is a measure of the phase correlations of the system} (\cite{teitel_helicity}). It can be shown that the \emph{helicity modulus} is given by
 			\begin{equation}\label{eq:helicity_modulus}
 				\Upsilon = -\frac{1}{2} \langle E \rangle - \frac{J}{k_B T L^2} \left\langle \left(\sum_{\langle i,j \rangle}{\sin(\Delta \theta) \vec{r_{ij}} \cdot \vec{e}}\right)^2 \right\rangle
@@ -56,4 +56,4 @@
 		Unlike the Ising model, the XY model does not feature a second-order phase transition of the usual kind, \enquote{as the ground state is unstable against low-energy spin-wave excitations} \cite[p. 1190]{kosterlitz}. It was shown by \cite{kosterlitz} that, instead, a transition now referred to as the KT phase transition occurs, where metastable states emerge below a critical temperature, $T_C$.
 	
 		\subsubsection{Vortices}
-			These metastable states \enquote{correspond to vortices which are closely bound in pairs} \cite[p. 1190]{kosterlitz}. The vortex/antivortex pairs come closer together as the temperature decreases, until they pair-annihilate each other.
+			These metastable states \enquote{correspond to vortices which are closely bound in pairs} \cite[p. 1190]{kosterlitz}. The vortex-antivortex pairs come closer together as the temperature decreases, until they pair-annihilate each other.

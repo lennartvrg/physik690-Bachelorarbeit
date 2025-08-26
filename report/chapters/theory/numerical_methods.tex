@@ -15,12 +15,36 @@
 				\item Calculate $\Delta H = \Delta E$, $\Delta M$, and $\Delta \Upsilon$ for the proposed new state.
 				\item Accept or reject state with probability $P = \min{(1, \exp{(-\beta\Delta H)})}$.
 			\end{enumerate}
-			\item Update the observables $E$, $M$, and $\Upsilon$ by adding $\Delta E$, $\Delta M$, and $\Delta \Upsilon$, respectively, and add them to the result set.
+			\item If the new state is accepted, update the observables $E$, $M$, and $\Upsilon$ by adding $\Delta E$, $\Delta M$, and $\Delta \Upsilon$, respectively, and add them to the result set.
 			\item Repeat from 2. for a total of $N$ sweeps.
 		\end{enumerate}
 		
+	\subsection{Autocorrelation}
+		The configurations obtained from that procedure are dependent on the configurations preceding them.  To measure this correlation, one can introduce the autocorrelation
+		\begin{equation}
+			C(\Delta t) = \langle(O(t) - \mu_O)(O(t + \Delta t) - \mu_O) \rangle
+		\end{equation}
+		(\citet[eq. (41)]{bootstrap}) and, to get a size-invariant measure, the normalized autocorrelation
+		\begin{equation}
+			\Gamma(\Delta t) = \frac{C(\Delta t)}{C(0)}
+		\end{equation}
+		(\citet[eq. (43)]{bootstrap}) with $\Delta t$ being the step between samples, $O$ an observable, and $\mu_O$ the mean of that observable. This measure decays exponentially, with the timescale $\tau$ being the point where samples are no longer correlated
+		\begin{equation}
+			\tau = \frac{1}{2} + \sum^{T}_{t=1}{\Gamma(t)}
+		\end{equation}
+		(\citet[eq. (46)]{bootstrap}) where we cut off the summation when it first crosses zero. In the implementation, we use a Discrete Fourier Transform to accelerate this step.
+		
+	\subsection{Thermalization and Blocking}\label{sec:blocking}
+		To obtain independent and identically distributed (iid) samples, we discard the first $\lceil 3\tau \rceil$ values in a thermalization step. We then perform a blocking step, where we divide the remaining samples into chunks of size $\lceil \tau \rceil$ and calculate the mean over each chunk. All further processing will use these blocked samples, which are now iid.
+		
 	\subsection{Critical Slowing Down}\label{sec:theo:critical_slowing_down}
-		While the Metropolis-Hastings algorithm performs well for both low and high temperatures, it encounters issues near the critical temperature.
+		Near the critical temperature, the autocorrelation drastically increases, which is due to critical slowing down effects and the dynamical exponent $z$, which is defined as
+		\begin{equation}
+			\tau \propto \xi^z
+		\end{equation}
+		(\citet[eq. (6)]{bootstrap}) where $\xi$ is the correlation length, which is a measure of how aligned spins are at a distance.
+		
+		While the correlation length $\xi$ is inherent to our physical system, the dynamical exponent is a property of the algorithm (e.g. Metropolis-Hastings) used to generate our configurations. It is therefore necessary to use other algorithms if we want to lower the dynamical exponent and thus reduce the critical slowing-down effects.
 		
 	\subsection{Wolff Cluster Algorithm}\label{sec:theo:wolff_cluster}
 		As discussed in~\Cref{sec:theo:critical_slowing_down}, the Metropolis-Hastings algorithm is prone to severe critical slowing-down effects. In a desire to mitigate such effects,~\cite{sw} introduced a multi-cluster Monte Carlo algorithm for the Potts spin model, \enquote{giving a highly efficient method of simulation for large systems near criticality} (\cite{sw}).
@@ -33,9 +57,9 @@
 		\end{equation}
 		which is an idempotent operation $R(\vec{r})^2=1$ \cite[eq. 3]{wolff}.
 	
-		The overall procedure for the Wolff cluster algorithm was adapted from~\citet[p. 361]{wolff} with the addition of~\cref{wolf_loop}. The step was added, as the probability of a site joining the lattice is lower for unordered states that emerge at high temperatures. Consequently, the average cluster size tends towards $1$ in those states. This results in a very uneven distribution of potential updates (\emph{marked} sites in the algorithm procedure). At low temperatures, many sites get visited and potentially updated, while at high temperatures, as few as one site gets updated. To mitigate this, we propose~\cref{wolf_loop} as an additional step that ensures a sufficient number of potential updates are made, even at high temperatures.
+		The overall procedure for the Wolff cluster algorithm was adapted from~\citet[p. 361]{wolff} with the addition of~\cref{wolf_loop}. The step was added, as the probability of a site joining the lattice is lower for unordered states that emerge at high temperatures. Consequently, the average cluster size tends towards $1$ in those states. This results in a very uneven distribution of potential updates (\emph{marked} sites in the algorithm procedure). At low temperatures, many sites get visited and potentially updated, while at high temperatures, as few as five (1 starting site + 4 neighbours) sites get marked. To mitigate this, we propose~\cref{wolf_loop} as an additional step that ensures a sufficient number of potential updates are made, even at high temperatures.
 		\begin{enumerate}
-			\item Calculate $E$, $M$, and $\Upsilon$ for the initial lattice configuration. Here, the initial setup is a cold state where $\sigma_i = 0$ for all sites $i$.
+			\item Calculate $E$, $M$, and $\Upsilon$ for the initial lattice configuration.
 			\item \label{wolf_loop} Perform the following until we have marked $L^2$ lattice sites in total:
 			\begin{enumerate}
 				\item Choose a random two-dimensional unit vector $\vec{r}$ as the reflection vector.
@@ -52,32 +76,15 @@
 			\item Update the observables $E$, $M$, and $\Upsilon$ by adding $\Delta E$, $\Delta M$, and $\Delta \Upsilon$, respectively, and add them to the result set.
 			\item Continue from~\cref{wolf_loop} until the exit condition is fulfilled.
 		\end{enumerate}
-		
-	\subsection{Autocorrelation}
-		The configurations obtained from that procedure are dependent on the configurations preceding them.  To measure this correlation, one can introduce the autocorrelation
-		\begin{equation}
-			C(\Delta t) = \langle(O(t) - \mu_O)(O(t + \Delta t) - \mu_O) \rangle
-		\end{equation}
-		(\citet[eq. (41)]{bootstrap}) and, to get a size-invariant measure, the normalized autocorrelation
-		\begin{equation}
-			\Gamma(\Delta t) = \frac{C(\Delta t)}{C(0)}
-		\end{equation}
-		(\citet[eq. (43)]{bootstrap}) with $\Delta t$ being the step between samples, $O$ an observable, and $\mu_O$ the mean of that observable. This measure decays exponentially with the timescale $\tau$, being the point where samples are no longer correlated
-		\begin{equation}
-			\tau = \frac{1}{2} + \sum^{T}_{t=1}{\Gamma(t)}
-		\end{equation}
-		(\citet[eq. (46)]{bootstrap}) where we cut off the summation when it first crosses zero. In the implementation, we use a Discrete Fourier Transform to accelerate this step.
-	
-	\subsection{Thermalization and Blocking}\label{sec:blocking}
-	To obtain independent and identically distributed (iid) samples, we discard the first $\lceil 3\tau \rceil$ values in a thermalization step. WeWe then perform a blocking step, where we divide the remaining samples into chunks of size $\lceil \tau \rceil$ and calculate the mean over each chunk. All further processing will use these blocked samples, which are now iid.
 	
 	\subsection{Bootstrapping}\label{sec:bootstrap}
-		Since the Metropolis-Hastings algorithm scales with the number of lattice sites, it is computationally impractical to run the Metropolis-Hastings algorithm for long timescales. Given that we have an observable whose iid samples follow a Gaussian distribution and we already have \enquote{enough} iid samples that cover a sufficient portion of the possible configuration space, we can then use bootstrapping to generate additional samples (\citet{bootstrap}).
+		Since both algorithms scale with the number of lattice sites, it is computationally impractical to run them for long timescales. Given that we have an observable whose iid samples follow a Gaussian distribution and we already have \enquote{enough} iid samples that cover a sufficient portion of the possible configuration space, we can then use bootstrapping to generate additional samples (\citet{bootstrap}).
 		\begin{enumerate}
 			\item Collect $B$ intermediate means by repeating the following:
 			\begin{enumerate}
 				\item Take $A$ random samples from the blocked samples obtained in~\cref{sec:blocking} with replacement.
 				\item Calculate the mean of those samples and add the result to the set of intermediate means.
 			\end{enumerate}
-			\item Calculate the final mean and the sample standard deviation of those $B$ intermediate means.
+			\item Calculate the sample standard deviation of those $B$ intermediate means as the uncertainty of our observable.
 		\end{enumerate}
+		The estimate for the observable is still calculated as the mean of the iid samples.
