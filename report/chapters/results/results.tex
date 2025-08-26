@@ -1,0 +1,18 @@
+\chapter{Results}
+	The following results were obtained from a run on a cluster with eight nodes, each with $16$ cores. The simulation was configured to run for lattice sizes $L \in \{4, 8, 16, \dots, 378\}$\footnote{Full list: $\{4, 8, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256, 272, 288, 304, 320,\\336, 352, 378\}$}. The initial setup is a cold state where $\sigma_i = 0$ for all sites $i$, $\num{200000}$ bootstrap resamples and a scanning depth of two. Each chunk performed $\num{50000}$ sweeps, with the number of chunks depending on the algorithm.
+	\begin{enumerate}
+		\item For the Metropolis algorithm, $\num{32}$ chunks were used, resulting in a total of $\num{1600000}$ sweeps.
+		\item For the Wolff algorithm, six chunks were used, resulting in a total of $\num{300000}$ sweeps.
+	\end{enumerate}
+	These numbers were chosen as initial, smaller-scale runs during development suggested that the Wolff algorithm suffers significantly less from the critical slowing down effect, resulting in more accurate results even with fewer sweeps. The simulation ran for five days on the aforementioned cluster.
+	
+	The following sections will discuss the results and derive estimates for the critical temperature $T_C$. Note that for the discussion of the observables, the focus will be on a subset of lattice sizes $L \in \{4, 32, 128, 352\}$ so as not to clutter the plots more than necessary. The plots for all observables at all lattice sizes may be found in the repository (see~\cref{chap:source_code}).
+	
+	\section{Cluster Size}\label{sec:res:cluster_size}
+		Some of the observations we will make in the following sections will only be explainable with the average cluster size. This observable is exclusive to the Wolff algorithm and is plotted in~\Cref{fig:obs:Wolff:ClusterSize}. The observable is dependent on the lattice size, as the maximum number of sites a cluster may have is at maximum equal to the total number of lattice sites.
+		
+		Taking into account the acceptance probability $P(\sigma_x, \sigma_y)$ (\cref{eq:wolff}) of the Wolff algorithm, it also makes sense that at low temperatures almost the entire lattice is part of the cluster. As the temperature increases, the average cluster size experiences a sharp dropoff, which is more pronounced for larger lattice sizes. For high temperatures, the average cluster size tends towards $\num{1}$ for all latices sizes. An essential aspect is that the dropoff happens after the point where we expect the critical temperature $T_C$ to be. If this were not the case, the Wolff algorithm would not yield an improvement over the Metropolis algorithm when estimating $T_C$.
+		
+		The observation that the average cluster tends towards $\num{0}$ when $T\rightarrow \infty$ also justifies the introduction of~\cref{wolf_loop} in~\cref{sec:theo:wolff_cluster}. If we did not do that, the lattice would not be given enough chances to update, which, at high temperatures, would result in a highly correlated observable. Correlated observables, in turn, would result in a larger integrated autocorrelation time $\tau$. As we use $\lceil \tau \rceil$ to block the intermediate results, it would also reduce the accuracy and precision of our final estimates, since we have fewer iid samples.
+		\Observable{Wolff}{ClusterSize}{average cluster size}
+	

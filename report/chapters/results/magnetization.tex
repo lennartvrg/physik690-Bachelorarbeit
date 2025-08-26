@@ -1,0 +1,52 @@
+\section{Magnetization}
+	\subsection{Observable}
+		\Observable{Metropolis}{Magnetization}{magnetization}
+		\Observable{Wolff}{Magnetization}{magnetization}
+		Studying the total absolute magnetization per spin for the Metropolis (\cref{fig:obs:Metropolis:Magnetization}) and Wolff (\cref{fig:obs:Wolff:Magnetization}) algorithms shows that, for low temperatures, the magnetization tends to $1$, indicating the existence of a quasi-ordered low-temperature state. With increasing temperature, the magnetization decreases steadily at first and then rapidly until it slowly levels out in the unordered high-temperature state. One can also see finite-size effects as, for increasing lattice sizes, the form of the curve becomes more pronounced.
+		
+		\paragraph{Magnetization Squared per Spin} The plots for the absolute total magnetization per spin, its autocorrelation function, and integrated autocorrelation time may be found in~\Cref{sec:observables:magnetization_squared}.
+	
+	\subsection{Magnetic Susceptibility}
+		\Observable{Metropolis}{MagneticSusceptibility}{magnetic susceptibility}
+		\Observable{Wolff}{MagneticSusceptibility}{magnetic susceptibility}
+		The magnetic susceptibility $\chi$ can be derived from $\langle M \rangle$ and $\langle M^2 \rangle$ according to~\Cref{eq:magnetic_suceptibility}.  Comparing the curve of the Metropolis (\cref{fig:obs:Metropolis:MagneticSusceptibility}) and Wolff (\cref{fig:obs:Wolff:MagneticSusceptibility}) algorithms reveals a similar form. The magnetic susceptibility is small for low and high temperatures. A peak exists near the critical temperature, which slowly shifts to the left and becomes narrower as the lattice size increases and the peak's magnitude decreases.
+		
+		Near criticality, the curve of $X$ obtained using the Wolff algorithm is a lot smoother, which can be attributed to the reduced critical slowing down effects experienced by the Wolff algorithm.
+	
+	\subsection{Estimating $T_C$ using the Magnetic Susceptibility $\chi$}
+		As shown by~\citet{shifted}, there exists a shifted temperature $T^*$ that asymptotically approaches the critical temperature $T_C$ for an infinite lattice
+		\begin{equation}\label{eq:shifted_temperature}
+			T^*(L) \approx T_C + \frac{\pi^2}{4c (\ln{L})^2}
+		\end{equation}
+		\cite[eq. 3]{shifted}. The shifted temperature gives us a way to estimate the critical temperature $T_C$. To confirm the correlation between lattice size and shifted temperature, we now take the maximum magnetic susceptibility $\chi_\text{max}$ per lattice size from~\Cref{fig:obs:Metropolis:MagneticSusceptibility} and plot the temperature $T$ where it occurs against $(\ln{L})^{-2}$ in~\Cref{fig:critical_temperature}.
+		\begin{figure}[htbp]
+			\centering
+			\includegraphics[width=0.8\textwidth]{../figures/Metropolis/Critical_Temperature.pdf}
+			\caption[Estimating $T_C$ using the Metropolis algorithm by plotting $T$ where $\chi$ is maximal against $(\ln L)^{-2}$]{The temperature at which $\chi$ is maximal against $(\ln L)^{-2}$ yields a linear correlation and confirms~\Cref{eq:shifted_temperature} for the Metropolis algorithm. The data was fitted using least-squares linear regression model and the errors were estimated using a bootstrap approach.}
+			\label{fig:critical_temperature}
+		\end{figure}
+		\begin{figure}[htbp]
+			\centering
+			\includegraphics[width=0.8\textwidth]{../figures/Wolff/Critical_Temperature.pdf}
+						\caption[Estimating $T_C$ using the Wolff algorithm by plotting $T$ where $\chi$ is maximal against $(\ln L)^{-2}$]{The temperature at which $\chi$ is maximal against $(\ln L)^{-2}$ yields a linear correlation and confirms~\Cref{eq:shifted_temperature} for the Wolff algorithm. The data was fitted using least-squares linear regression model and the errors were estimated using a bootstrap approach.}
+			\label{fig:critical_temperature_wolf}
+		\end{figure}
+		
+		We fitted an ordinary linear regression model using a least-squares method against our measurements, which confirms the correlation of lattice size and shifted temperature. The intercept of the fit gives the estimate for the critical temperature. To estimate our uncertainties, we used a bootstrap approach by resampling $\num{10 000}$ times from our measurements and redoing our linear regression model each time. As seen on the right side in~\Cref{fig:critical_temperature}, the distribution of intercepts $b$ follows a Gaussian distribution and therefore the central limit theorem. The standard deviation $\sigma$ of our bootstrapped intercepts was taken as the error of our estimate of the critical temperature
+		\begin{equation}
+			T_{C, \text{Metropolis}} = \SI{0.8807(66)}{\J\per\kb}.
+		\end{equation}
+		Doing the same for the Wolff algorithm (\cref{fig:critical_temperature_wolf}) for our $\chi_\text{max}$ obtained from~\Cref{fig:obs:Wolff:MagneticSusceptibility} yields
+		\begin{equation}
+			T_{C, \text{Wolff}} = \SI{0.8952(8)}{\J\per\kb}.
+		\end{equation}
+		Comparing the two estimates shows that the Wolff algorithm yielded a more precise measurement. The increase in precision can be attributed to the reduced critical slowing down effects experienced by the Wolff algorithm.
+		
+		We can compare our result with some literature values:
+		\begin{itemize}
+			\item In~\citet{literature_gpu}, the authors used a GPU-based Monte Carlo approach to estimate the critical temperature to $T_C=\SI{0.8935(1)}{\J\per\kb}$.
+			\item In~\citet{literature_cpu}, the authors used a CPU-based Monte Carlo approach to estimate the critical temperature to $T_C=\SI{0.89213(10)}{\J\per\kb}$.
+			\item A theoretical transfer matrix approach employed by~\cite{literature_theo} led to a critical temperature of $T_C \approx \SI{0.8916}{\J\per\kb}$.
+		\end{itemize}
+	
+

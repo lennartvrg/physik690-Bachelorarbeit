@@ -1,0 +1,32 @@
+\chapter{TOML Config Schema}\label{chap:config}
+\begin{minted}[breaklines]{toml}
+[simulation]
+identifier = 0 # Multiple runs can be saved in the same database and this is their identifier
+bootstrap_resamples = 200000 # The number of bootstrap resamples to perform
+
+[storage]
+engine = 2 # 1 is SQLite and 2 is PostgreSQL
+connection_string = "" # Either a valid PostgreSQL connection string or a path to an SQLite file
+
+[temperature]
+max = 3.0 # The maximum T for the initial temperature range (0.0, max]
+steps = 64 # The number of divisions for the temperatures
+max_depth = 2 # The total number of zoom steps. 
+
+[vortices]
+sizes = [64] # The lattice sizes for which the vortices are simulated
+
+[metropolis]
+num_chunks = 24 # The number of chunks when using Metropolis
+sweeps_per_chunk = 50000 # The number of sweeps per chunk for Metropolis
+sizes = [ # The lattice sizes for Metropolis
+	4, 8, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256, 272, 288, 304, 320, 336, 352, 368
+]
+
+[wolff]
+num_chunks = 6 # The number of chunks when using Wolff
+sweeps_per_chunk = 50000 # The number of sweeps per chunk for Wolff
+sizes = [ # The lattice sizes for Wolff
+	4, 8, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256, 272, 288, 304, 320, 336, 352, 368
+]
+\end{minted}
