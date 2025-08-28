@@ -12,7 +12,7 @@
 		The program uses the \mintinline{bash}{-march=native} compiler flag and should therefore be compiled on a system with the same or very similar CPU as the compute nodes. Additionally, the \mintinline{bash}{-ffast-math} flag is used, which sacrifices ISO compliance for execution speed. Although no systematic testing is conducted, the total wall-time improvement on the development machine is $\approx \SI{20}{\percent}$ better, with no observable loss in numerical results. 
 	
 	\paragraph{Intel Compiler}
-		We also want to try the \emph{Intel\textsuperscript{\tiny\textregistered}} oneAPI DPC++/C++ compiler as the manufacturer claims it offers superiority over \emph{gcc} in HPC workloads. No systematic testing is conducted, but on the development machine (AMD Ryzen 1700) a $\SI{6}{\percent}$ reduction of the total wall-time is observed. Tests on a second machine (\emph{Intel\textsuperscript{\tiny\textregistered} i7-10710U}) yield a $\SI{14}{\percent}$ improvement over $\emph{gcc 15}$.
+		We also want to try the \emph{Intel\textsuperscript{\tiny\textregistered}} oneAPI DPC++/C++ compiler, as the manufacturer claims it offers superiority over \emph{gcc} in HPC workloads. No systematic testing is conducted, but on the development machine (AMD Ryzen 1700) a $\SI{6}{\percent}$ reduction of the total wall-time is observed. Tests on a second machine (\emph{Intel\textsuperscript{\tiny\textregistered} i7-10710U}) yield a $\SI{14}{\percent}$ improvement over $\emph{gcc 15}$.
 			
 	
 

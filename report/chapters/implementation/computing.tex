@@ -2,7 +2,7 @@
 	The temperature scanning of~\Cref{sec:impl:scanning} divides every lattice size $L$ into $N$ steps and $I$ iterations. As the number of configurations far exceeds the core count of a single computer for any realistic choice of $L$, $N$, and $I$, the computational efforts should be scaled out across multiple compute nodes. The implementation addresses the shortcomings mentioned at the beginning of~\Cref{sec:impl} and requires two kinds of nodes.
 	
 	\subsubsection{Data Node}\label{sec:impl:computing:data}
-		The \emph{data} node is responsible for orchestrating the compute nodes and storing the intermediate and final results. The orchestration is realized using a  \emph{PostgreSQL}\footnote{\url{https://www.postgresql.org}} database and does not require any additional software. Having a central \emph{data} node fixes shortcoming~\cref{shortcomings:sqlite} where the nodes need to have access to a common network share.
+		The \emph{data} node is responsible for orchestrating the compute nodes and storing the intermediate and final results. The orchestration is realized using a  \emph{PostgreSQL}\footnote{\url{https://www.postgresql.org}} database and does not require any additional software. Having a central \emph{data} node fixes shortcoming~\cref{shortcomings:sqlite}, where the nodes need to have access to a common network share.
 		
 		The schema for the \emph{PostgreSQL} database is presented in~\Cref{chap:schema}. Foreign keys link all relevant database entities, and unique constraints have been added to ensure that every configuration is simulated exactly once.
 	
