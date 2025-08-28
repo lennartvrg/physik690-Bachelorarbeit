@@ -46,14 +46,14 @@
 %\AddToHook{cmd/section/before}{\clearpage}
 \graphicspath{ {../figures/} }
 
-\title{Studying the Kosterlitz-Thouless Transition of the two-dimensional XY model using Monte Carlo methods}
+\title{Studying the Kosterlitz-Thouless Transition of the two-dimensional XY Model using Monte Carlo Methods}
 \author{Lennart Voorgang}
 \date{}
 \publishers{\LARGE
 	\begin{otherlanguage}{ngerman}
 		Bachelorarbeit in Physik\\
 		angefertigt am\\
-		Helmholtz-Instituts für Strahlen- und Kernphysik\\[3ex]
+		Helmholtz-Institut für Strahlen- und Kernphysik\\[3ex]
 		vorgelegt der\\
 		Mathematisch-Naturwissenschaftlichen Fakultät\\
 		der\\
@@ -86,26 +86,32 @@
 	\end{otherlanguage}
 }
 
-\def\lattices{4, 8, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240, 256, 272, 288, 304, 320, 336, 352, 378}
 
 \newcommand{\Observable}[3]{\begin{figure}[htbp]
 		\centering
 		\includegraphics[width=0.8\textwidth]{../figures/#1/#2.pdf}
-		\caption[Temperature dependence of the #3 per spin (#1)]{Temperature dependence of the #3 per spin using the #1 algorithm for lattice sizes $L \in \{4, 32, 128, 352\}$.}
+		\caption[Temperature dependence of the #3 per spin (#1)]{Temperature dependence of the #3 per spin using the #1 algorithm for lattice sizes $L \in \{4, 32, 128, 368\}$.}
 		\label{fig:obs:#1:#2}
+\end{figure}}
+
+\newcommand{\Error}[3]{\begin{figure}[htbp]
+		\centering
+		\includegraphics[width=0.7\textwidth]{../figures/#1/#2_Errors.pdf}
+		\caption[Temperature dependence of the #3 per spin errors (#1)]{Temperature dependence of the #3 per spin errors using the #1 algorithm for lattice sizes $L \in \{4, 32, 128, 368\}$.}
+		\label{fig:obs:#1:#2:errors}
 \end{figure}}
 
 \newcommand{\Autocorrelation}[3]{\begin{figure}[htbp]
 		\centering
 		\includegraphics[width=0.8\textwidth]{../figures/#1/#2_Autocorrelation.pdf}
-		\caption[Autocorrelation function $\Gamma(\Delta t)$ of the #3 per spin (#1)]{Autocorrelation function $\Gamma(\Delta t)$ of the #3 per spin using the #1 algorithm.}
+		\caption[Autocorrelation function $\Gamma(\Delta t)$ of the #3 per spin (#1)]{Autocorrelation function $\Gamma(\Delta t)$ of the #3 per spin using the #1 algorithm for $L=8$.}
 		\label{fig:obs:#1:#2:autocorrelation}
 \end{figure}}
 
 \newcommand{\IntegratedAutocorrelation}[3]{\begin{figure}[htbp]
 		\centering
 		\includegraphics[width=0.8\textwidth]{../figures/#1/#2_IntegratedAutocorrelation.pdf}
-		\caption[Integrated autocorrelation time $\tau$ of the #3 per spin (#1)]{Integrated autocorrelation time $\tau$ of the #3 per spin using the #1 algorithm.}
+		\caption[Integrated autocorrelation time $\tau$ of the #3 per spin (#1)]{Integrated autocorrelation time $\tau$ of the #3 per spin using the #1 algorithm for lattice sizes $L \in \{4, 32, 128, 368\}$.}
 		\label{fig:obs:#1:#2:integrated}
 \end{figure}}
 
@@ -139,6 +145,7 @@
 			\input{chapters/results/energy}
 			\input{chapters/results/magnetization}
 			\input{chapters/results/vortex}
+			\input{chapters/results/scaling}
 			
 			% Conclusion
 			\input{chapters/conclusion/conclusion}
@@ -150,6 +157,7 @@
 		\input{chapters/appendix/config}
 		\input{chapters/appendix/schema}
 		\input{chapters/appendix/observables}
+		\input{chapters/appendix/vortices}
 		
 	\backmatter\pagenumbering{Roman}
 		\listoffigures

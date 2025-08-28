@@ -11,7 +11,7 @@ public:
 
 	bool prepare_simulation(Config config) override;
 
-	std::optional<std::tuple<std::size_t, std::size_t>> next_vortex(int simulation_id) override;
+	std::optional<std::tuple<std::size_t, algorithms::Algorithm, std::size_t>> next_vortex(int simulation_id) override;
 
 	void save_vortices(std::size_t vortex_id, std::vector<std::tuple<double_t, std::size_t, std::vector<double_t>>>) override;
 

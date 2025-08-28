@@ -19,7 +19,7 @@
 		with $\beta = (k_B T)^{-1}$ so that $[\beta] = \si{\per\joule}$ and $k_B$ being the Boltzmann constant. The coupling constant $J$ is set to $J = \SI{1}{\joule}$ so that $\beta J$ is dimensionless and $[H] = \si{\joule}$. 
 		
 	\subsection{Observables}
-		For our studies, we will be using a square two-dimensional lattice with side length $L$, nearest neighbour approximation, and periodic boundary conditions, which, topologically, forms a taurus. As the observables of the XY model scale with the number of lattice sites, it is generally more insightful to study the observables per spin. This way, the finite-size scaling of the observables can be observed better.
+		For our studies, we use a square two-dimensional lattice with side length $L$, nearest neighbour approximation, and periodic boundary conditions, which, topologically, forms a torus. As the observables of the XY model scale with the number of lattice sites, it is generally more insightful to study the observables per spin. This way, the finite-size scaling of the observables can be observed more accurately.
 	
 		\paragraph{Energy per spin}
 			The total energy of the system is given by its Hamiltonian and thus
@@ -46,7 +46,7 @@
 			\end{equation}
 		
 		\paragraph{Helicity modulus per spin}
-			According to~\cite{teitel_helicity}, one can also derive the \emph{spin wave stiffness} or \emph{helicity modulus} $\Upsilon$, which \textquote{is a measure of the phase correlations of the system} (\cite{teitel_helicity}). It can be shown that the \emph{helicity modulus} is given by
+			According to~\cite{teitel_helicity}, one can also derive the \emph{spin wave stiffness} or \emph{helicity modulus} $\Upsilon$, which \textquote{is a measure of the phase correlations of the system} (\cite[p. 598]{teitel_helicity}). It can be shown that the \emph{helicity modulus} is given by
 			\begin{equation}\label{eq:helicity_modulus}
 				\Upsilon = -\frac{1}{2} \langle E \rangle - \frac{J}{k_B T L^2} \left\langle \left(\sum_{\langle i,j \rangle}{\sin(\Delta \theta) \vec{r_{ij}} \cdot \vec{e}}\right)^2 \right\rangle
 			\end{equation}
@@ -55,5 +55,5 @@
 	\subsection{Kosterlitz–Thouless Transition}
 		Unlike the Ising model, the XY model does not feature a second-order phase transition of the usual kind, \enquote{as the ground state is unstable against low-energy spin-wave excitations} \cite[p. 1190]{kosterlitz}. It was shown by \cite{kosterlitz} that, instead, a transition now referred to as the KT phase transition occurs, where metastable states emerge below a critical temperature, $T_C$.
 	
-		\subsubsection{Vortices}
-			These metastable states \enquote{correspond to vortices which are closely bound in pairs} \cite[p. 1190]{kosterlitz}. The vortex-antivortex pairs come closer together as the temperature decreases, until they pair-annihilate each other.
+	\subsection{Vortices}
+		These metastable states \enquote{correspond to vortices which are closely bound in pairs} \cite[p. 1190]{kosterlitz}. The vortex-antivortex pairs come closer together as the temperature decreases, until they pair-annihilate each other.

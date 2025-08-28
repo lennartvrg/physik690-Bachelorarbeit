@@ -107,15 +107,17 @@ CREATE TABLE IF NOT EXISTS "vortices" (
 	vortex_id				INTEGER				NOT NULL GENERATED ALWAYS AS IDENTITY,
 
 	simulation_id			INTEGER				NOT NULL,
+	algorithm				INTEGER				NOT NULL CHECK (algorithm = 0 OR algorithm = 1),
 	lattice_size			INTEGER				NOT NULL CHECK (lattice_size > 0),
 
 	worker_id				INTEGER					NULL,
 
 	CONSTRAINT "PK.Vortices_VortexId" PRIMARY KEY (vortex_id),
-	CONSTRAINT "FK.Vortices_ActiveWorkerId" FOREIGN KEY (worker_id) REFERENCES "workers" (worker_id)
+	CONSTRAINT "FK.Vortices_ActiveWorkerId" FOREIGN KEY (worker_id) REFERENCES "workers" (worker_id),
+	CONSTRAINT "FK.Vortices_SimulationId" FOREIGN KEY (simulation_id) REFERENCES "simulations" (simulation_id)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS "IX.Vortices_SimulationId_LatticeSize" ON "vortices" (simulation_id, lattice_size);
+CREATE UNIQUE INDEX IF NOT EXISTS "IX.Vortices_SimulationId_Algorithm_LatticeSize" ON "vortices" (simulation_id, algorithm, lattice_size);
 
 CREATE INDEX IF NOT EXISTS "IX.Vortices_ActiveWorkerId" ON "vortices" (worker_id);
 
@@ -126,7 +128,8 @@ CREATE TABLE IF NOT EXISTS "vortex_results" (
 	temperature				REAL				NOT NULL,
 	spins					BYTEA				NOT NULL,
 
-	CONSTRAINT "PK.VortexResults_VortexId_Sweeps" PRIMARY KEY (vortex_id, sweeps)
+	CONSTRAINT "PK.VortexResults_VortexId_Sweeps" PRIMARY KEY (vortex_id, sweeps),
+	CONSTRAINT "FK.VortexResults_VortexId" FOREIGN KEY (vortex_id) REFERENCES "vortices" (vortex_id)
 );
 
 CREATE OR REPLACE FUNCTION "FNC.RemoveInactiveWorkers"() RETURNS TRIGGER AS
@@ -268,8 +271,8 @@ ON CONFLICT (simulation_id) DO UPDATE SET bootstrap_resamples = $2
 )~~~~~~";
 
 constexpr std::string_view InsertVorticesQuery = R"~~~~~~(
-INSERT INTO "vortices" (simulation_id, lattice_size) VALUES ($1, $2)
-ON CONFLICT (simulation_id, lattice_size) DO NOTHING
+INSERT INTO "vortices" (simulation_id, algorithm, lattice_size) VALUES ($1, $2, $3)
+ON CONFLICT (simulation_id, algorithm, lattice_size) DO NOTHING
 )~~~~~~";
 
 constexpr std::string_view InsertMetadataQuery = R"~~~~~~(
@@ -335,7 +338,8 @@ bool PostgresStorage::prepare_simulation(const Config config) {
 			});
 
 			for (const auto size : config.vortex_sizes) {
-				transaction.exec(pqxx::prepped { "vortex" }, { config.simulation_id, size });
+				transaction.exec(pqxx::prepped { "vortex" }, { config.simulation_id, static_cast<int>(algorithms::Algorithm::METROPOLIS), size });
+				transaction.exec(pqxx::prepped { "vortex" }, { config.simulation_id, static_cast<int>(algorithms::Algorithm::WOLFF), size });
 			}
 
 			for (const auto & [key, value] : config.algorithms) {
@@ -414,23 +418,23 @@ bool PostgresStorage::prepare_simulation(const Config config) {
 
 constexpr std::string_view NextVortexQuery = R"~~~~~~(
 WITH selected AS (
-	SELECT v."vortex_id", v."lattice_size" FROM "vortices" v WHERE v."simulation_id" = $1 AND NOT EXISTS (
+	SELECT v."vortex_id", v."algorithm", v."lattice_size" FROM "vortices" v WHERE v."simulation_id" = $1 AND NOT EXISTS (
 		SELECT * FROM "vortex_results" vr WHERE vr.vortex_id = v.vortex_id
 	) AND (
 		v."worker_id" IS NULL OR v."worker_id" IN (SELECT w."worker_id" FROM "workers" w WHERE w."last_active_at" < CAST(extract(epoch FROM now() - INTERVAL '5 minutes') AS int))
-	) FOR UPDATE OF v
+	) LIMIT 1
 )
 UPDATE vortices SET worker_id = $2
 FROM selected WHERE worker_id IS NULL AND vortices.vortex_id = selected.vortex_id
 RETURNING selected.*;
 )~~~~~~";
 
-std::optional<std::tuple<std::size_t, std::size_t>> PostgresStorage::next_vortex(const int simulation_id) {
+std::optional<std::tuple<std::size_t, algorithms::Algorithm, std::size_t>> PostgresStorage::next_vortex(const int simulation_id) {
 	while (true) {
 		try {
 			pqxx::transaction<pqxx::repeatable_read> transaction { db };
 
-			const auto pair = transaction.query01<int, int>(NextVortexQuery.data(), {
+			const auto pair = transaction.query01<int, int, int>(NextVortexQuery.data(), {
 				simulation_id, worker_id
 			});
 
@@ -439,8 +443,8 @@ std::optional<std::tuple<std::size_t, std::size_t>> PostgresStorage::next_vortex
 				return std::nullopt;
 			}
 
-			const auto [vortex_id, lattice_size] = *pair;
-			return {{ static_cast<std::size_t>(vortex_id), static_cast<std::size_t>(lattice_size) }};
+			const auto [vortex_id, algorithm, lattice_size] = *pair;
+			return {{ static_cast<std::size_t>(vortex_id), static_cast<algorithms::Algorithm>(algorithm), static_cast<std::size_t>(lattice_size) }};
 		} catch (const pqxx::serialization_failure &) {
 			std::cout << "[PostgreSQL] Conflict while fetching next vortex. Trying again..." << std::endl;
 			utils::sleep_between(1000, 3000);
@@ -468,6 +472,7 @@ void PostgresStorage::save_vortices(const std::size_t vortex_id, std::vector<std
 			});
 		}
 
+		db.unprepare("insert_vortex");
 		transaction.commit();
 	} catch (std::exception & e) {
 		std::cout << "[PostgreSQL] Failed to fetch save vortex results. PostgreSQL exception: " << e.what() << std::endl;

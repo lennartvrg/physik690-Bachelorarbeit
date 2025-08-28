@@ -1,5 +1,5 @@
 \chapter{Additional Observables}
-	\section{Energy Squared per Spin}\label{sec:observables:energy_squared}
+	\section{Energy Squared}\label{sec:observables:energy_squared}
 		\Observable{Metropolis}{EnergySquare}{energy squared}
 		\Observable{Wolff}{EnergySquare}{energy squared}
 		
@@ -9,7 +9,7 @@
 		\IntegratedAutocorrelation{Metropolis}{EnergySquare}{energy squared}
 		\IntegratedAutocorrelation{Wolff}{EnergySquare}{energy squared}
 
-	\section{Magnetization Squared per Spin}\label{sec:observables:magnetization_squared}
+	\section{Magnetization Squared}\label{sec:observables:magnetization_squared}
 		\Observable{Metropolis}{MagnetizationSquare}{magnetization squared}
 		\Observable{Wolff}{MagnetizationSquare}{magnetization squared}
 		
@@ -19,5 +19,35 @@
 		\IntegratedAutocorrelation{Metropolis}{MagnetizationSquare}{magnetization squared}
 		\IntegratedAutocorrelation{Wolff}{MagnetizationSquare}{magnetization squared}
 
-\chapter{Residuals}\label{chap:residuals}
-	\todo{Export residuals and plot them}
+\chapter{Errors}\label{chap:errors}
+	\section{Cluster Size}\label{sec:errors:cluster}
+		\Error{Metropolis}{Energy}{energy}
+		\Error{Wolff}{Energy}{energy}
+	
+	\section{Energy}\label{sec:errors:energy}
+		\Error{Metropolis}{Energy}{energy}
+		\Error{Wolff}{Energy}{energy}
+
+	\section{Energy Squared}\label{sec:errors:energysquare}
+		\Error{Metropolis}{EnergySquare}{energy squared}
+		\Error{Wolff}{EnergySquare}{energy squared}
+	
+	\section{Specific Heat}\label{sec:errors:specificheat}
+		\Error{Metropolis}{SpecificHeat}{specific heat}
+		\Error{Wolff}{SpecificHeat}{specific heat}
+	
+	\section{Helicity Modulus}\label{sec:errors:helicity}
+		\Error{Metropolis}{HelicityModulus}{helicity modulus}
+		\Error{Wolff}{HelicityModulus}{helicity modulus}
+	
+	\section{Magnetization}\label{sec:errors:magnetization}
+		\Error{Metropolis}{Magnetization}{magnetization}
+		\Error{Wolff}{Magnetization}{magnetization}
+
+	\section{Magnetization Squared}\label{sec:errors:magnetizationsquare}
+		\Error{Metropolis}{MagnetizationSquare}{magnetization squared}
+		\Error{Wolff}{MagnetizationSquare}{magnetization squared}
+	
+	\section{Magnetic Susceptibility}\label{sec:errors:magneticsusceptibility}
+		\Error{Metropolis}{MagneticSusceptibility}{magnetic susceptibility}
+		\Error{Wolff}{MagneticSusceptibility}{magnetic susceptibility}

@@ -1,12 +1,12 @@
 \section{Numerical Methods}\label{sec:theo:numerical_methods}
-	As stated in the introduction in~\Cref{chap:introduction}, the goal is to simulate the two-dimensional XY model using the Metropolis-Hastings and the Wolff-Cluster algorithms. In the following sections, we will present the algorithms and concepts needed for understanding and implementing the simulation.
+	As stated in the introduction in~\Cref{chap:introduction}, the goal is to simulate the two-dimensional XY model using the Metropolis-Hastings and the Wolff-Cluster algorithms. In the following sections, we present the algorithms and concepts needed for understanding and implementing the simulation.
 
 	\subsection{Metropolis Algorithm}\label{sec:theo:metropolis}
 		The fundamental problem we need to solve is that we want to generate configurations of our system with probability $P(\sigma) = \exp{(-\beta H[\sigma])}/Z$. The problem is that the partition sum $Z$ is not easy to calculate. As shown by~\citet{metropolis}, it is sufficient to calculate the ratio of probabilities instead
 		\begin{equation}
 			\frac{P(y)}{P(x)} = \exp{(-\beta(H[y] - H[x]))} = \exp{(-\beta \Delta H)}.
 		\end{equation}
-		This procedure generates a Markov chain of dependent configurations. The overall procedure for the lattice is as follows:
+		which follows from \emph{detailed balance}. This procedure generates a Markov chain of dependent configurations which converges to a static distribution and where any configuration is reachable (condition of \emph{ergodicity}). The overall procedure for the lattice is as follows a:
 		\begin{enumerate}
 			\item Calculate $E$, $M$, and $\Upsilon$ for the initial lattice configuration.
 			\item Perform a lattice sweep by iterating over all lattice sites. For every site $i$ do:
@@ -24,15 +24,15 @@
 		\begin{equation}
 			C(\Delta t) = \langle(O(t) - \mu_O)(O(t + \Delta t) - \mu_O) \rangle
 		\end{equation}
-		(\citet[eq. (41)]{bootstrap}) and, to get a size-invariant measure, the normalized autocorrelation
+		\cite[eq. (41)]{bootstrap} and, to get a size-invariant measure, the normalized autocorrelation
 		\begin{equation}
 			\Gamma(\Delta t) = \frac{C(\Delta t)}{C(0)}
 		\end{equation}
-		(\citet[eq. (43)]{bootstrap}) with $\Delta t$ being the step between samples, $O$ an observable, and $\mu_O$ the mean of that observable. This measure decays exponentially, with the timescale $\tau$ being the point where samples are no longer correlated
+		\cite[eq. (43)]{bootstrap} with $\Delta t$ being the step between samples, $O$ an observable, and $\mu_O$ the mean of that observable. This measure decays exponentially, with the integrated autocorrelation time $\tau$ being the point where samples are no longer correlated
 		\begin{equation}
 			\tau = \frac{1}{2} + \sum^{T}_{t=1}{\Gamma(t)}
 		\end{equation}
-		(\citet[eq. (46)]{bootstrap}) where we cut off the summation when it first crosses zero. In the implementation, we use a Discrete Fourier Transform to accelerate this step.
+		\cite[eq. (46)]{bootstrap}. The summation is cut off when it first crosses zero. In the implementation, we use a Discrete Fourier Transform to accelerate this step.
 		
 	\subsection{Thermalization and Blocking}\label{sec:blocking}
 		To obtain independent and identically distributed (iid) samples, we discard the first $\lceil 3\tau \rceil$ values in a thermalization step. We then perform a blocking step, where we divide the remaining samples into chunks of size $\lceil \tau \rceil$ and calculate the mean over each chunk. All further processing will use these blocked samples, which are now iid.
@@ -42,12 +42,12 @@
 		\begin{equation}
 			\tau \propto \xi^z
 		\end{equation}
-		(\citet[eq. (6)]{bootstrap}) where $\xi$ is the correlation length, which is a measure of how aligned spins are at a distance.
+		(\citet[eq. (6)]{bootstrap}). Here, $\xi$ is the correlation length, which is a measure of how aligned spins are at a distance.
 		
 		While the correlation length $\xi$ is inherent to our physical system, the dynamical exponent is a property of the algorithm (e.g. Metropolis-Hastings) used to generate our configurations. It is therefore necessary to use other algorithms if we want to lower the dynamical exponent and thus reduce the critical slowing-down effects.
 		
 	\subsection{Wolff Cluster Algorithm}\label{sec:theo:wolff_cluster}
-		As discussed in~\Cref{sec:theo:critical_slowing_down}, the Metropolis-Hastings algorithm is prone to severe critical slowing-down effects. In a desire to mitigate such effects,~\cite{sw} introduced a multi-cluster Monte Carlo algorithm for the Potts spin model, \enquote{giving a highly efficient method of simulation for large systems near criticality} (\cite{sw}).
+		As discussed in~\Cref{sec:theo:critical_slowing_down}, the Metropolis-Hastings algorithm is prone to severe critical slowing-down effects. In a desire to mitigate such effects,~\cite{sw} introduced a multi-cluster Monte Carlo algorithm for the Potts spin model, \enquote{giving a highly efficient method of simulation for large systems near criticality} \cite[p. 86]{sw}.
 		
 		Adjacent to the multi-cluster Swendson and Wang algorithm, the Wollf algorithm exhibits similar improvements in the critical exponent, while utilizing only a single cluster, which makes implementations more straightforward.
 		
@@ -57,7 +57,9 @@
 		\end{equation}
 		which is an idempotent operation $R(\vec{r})^2=1$ \cite[eq. 3]{wolff}.
 	
-		The overall procedure for the Wolff cluster algorithm was adapted from~\citet[p. 361]{wolff} with the addition of~\cref{wolf_loop}. The step was added, as the probability of a site joining the lattice is lower for unordered states that emerge at high temperatures. Consequently, the average cluster size tends towards $1$ in those states. This results in a very uneven distribution of potential updates (\emph{marked} sites in the algorithm procedure). At low temperatures, many sites get visited and potentially updated, while at high temperatures, as few as five (1 starting site + 4 neighbours) sites get marked. To mitigate this, we propose~\cref{wolf_loop} as an additional step that ensures a sufficient number of potential updates are made, even at high temperatures.
+		The overall procedure for the Wolff algorithm was adapted from~\citet[p. 361]{wolff} with the addition of~\cref{wolf_loop}. The step was added, as the probability of a site joining the lattice is lower for unordered states that emerge at high temperatures. Consequently, the average cluster size tends towards $1$ in those states. This results in a very uneven distribution of potential updates (\emph{marked} sites in the algorithm procedure). At low temperatures, many sites get visited and potentially updated, while at high temperatures, as few as five (1 starting site + 4 neighbours) sites get marked. To mitigate this, we propose~\cref{wolf_loop} as an additional step that ensures a sufficient number of potential updates is made, even at high temperatures.
+		
+		This leads to the following procedure:
 		\begin{enumerate}
 			\item Calculate $E$, $M$, and $\Upsilon$ for the initial lattice configuration.
 			\item \label{wolf_loop} Perform the following until we have marked $L^2$ lattice sites in total:
@@ -76,9 +78,10 @@
 			\item Update the observables $E$, $M$, and $\Upsilon$ by adding $\Delta E$, $\Delta M$, and $\Delta \Upsilon$, respectively, and add them to the result set.
 			\item Continue from~\cref{wolf_loop} until the exit condition is fulfilled.
 		\end{enumerate}
+		The procedure also fulfills \emph{ergodicity} as there is \enquote{always a nonvanishing probability that [the cluster] $c$ consists of only one site, and that there is always a refiection connecting any two spins} \citep[p. 361]{wolff}.  Further, the condition of~\emph{detailed balance} is also fulfilled~\cite[eq. 6]{wolff}.
 	
 	\subsection{Bootstrapping}\label{sec:bootstrap}
-		Since both algorithms scale with the number of lattice sites, it is computationally impractical to run them for long timescales. Given that we have an observable whose iid samples follow a Gaussian distribution and we already have \enquote{enough} iid samples that cover a sufficient portion of the possible configuration space, we can then use bootstrapping to generate additional samples (\citet{bootstrap}).
+		Since both algorithms scale with the number of lattice sites, it is computationally impractical to run them for long timescales. Given that we have an observable whose iid samples follow a Gaussian distribution and we already have \enquote{enough} iid samples that cover a sufficient portion of the possible configuration space, we then use bootstrapping to generate additional samples (\citet{bootstrap}).
 		\begin{enumerate}
 			\item Collect $B$ intermediate means by repeating the following:
 			\begin{enumerate}

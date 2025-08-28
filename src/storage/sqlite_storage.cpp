@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS "vortices" (
 	vortex_id				INTEGER				NOT NULL,
 
 	simulation_id			INTEGER				NOT NULL,
+	algorithm				INTEGER				NOT NULL CHECK (algorithm = 0 OR algorithm = 1),
 	lattice_size			INTEGER				NOT NULL CHECK (lattice_size > 0),
 
 	worker_id				INTEGER					NULL,
@@ -249,7 +250,7 @@ ON CONFLICT DO UPDATE SET bootstrap_resamples = @bootstrap_resamples
 )~~~~~~";
 
 constexpr std::string_view InsertVorticesQuery = R"~~~~~~(
-INSERT INTO "vortices" (simulation_id, lattice_size) VALUES (@simulation_id, @lattice_size)
+INSERT INTO "vortices" (simulation_id, algorithm, lattice_size) VALUES (@simulation_id, @algorithm, @lattice_size)
 ON CONFLICT DO NOTHING
 )~~~~~~";
 
@@ -313,6 +314,13 @@ bool SQLiteStorage::prepare_simulation(const Config config) {
 		SQLite::Statement vortex { db, InsertVorticesQuery.data() };
 		for (const auto size : config.vortex_sizes) {
 			vortex.bind("@simulation_id", config.simulation_id);
+			vortex.bind("@algorithn", algorithms::Algorithm::METROPOLIS);
+			vortex.bind("@lattice_size", static_cast<int>(size));
+			vortex.exec();
+			vortex.reset();
+
+			vortex.bind("@simulation_id", config.simulation_id);
+			vortex.bind("@algorithn", algorithms::Algorithm::WOLFF);
 			vortex.bind("@lattice_size", static_cast<int>(size));
 			vortex.exec();
 			vortex.reset();
@@ -425,18 +433,18 @@ bool SQLiteStorage::prepare_simulation(const Config config) {
 }
 
 constexpr std::string_view NextVortexQuery = R"~~~~~~(
-SELECT v."vortex_id", v."lattice_size" FROM "vortices" v WHERE v."simulation_id" = @simulation_id AND NOT EXISTS (
+SELECT v."vortex_id", v."algorithm", v."lattice_size" FROM "vortices" v WHERE v."simulation_id" = @simulation_id AND NOT EXISTS (
 	SELECT * FROM "vortex_results" vr WHERE vr.vortex_id = v.vortex_id
 ) AND (
 	v."worker_id" IS NULL OR v."worker_id" IN (SELECT w."worker_id" FROM "workers" w WHERE w."last_active_at" < unixepoch('now', '-5 minutes'))
-)
+) LIMIT 1
 )~~~~~~";
 
 constexpr std::string_view SetVortexActiveWorkerId = R"~~~~~~(
 UPDATE "vortices" SET "worker_id" = @worker_id WHERE "vortex_id" = @vortex_id;
 )~~~~~~";
 
-std::optional<std::tuple<std::size_t, std::size_t>> SQLiteStorage::next_vortex(const int simulation_id) {
+std::optional<std::tuple<std::size_t, algorithms::Algorithm, std::size_t>> SQLiteStorage::next_vortex(const int simulation_id) {
 	try {
 		SQLite::Transaction transaction { db, SQLite::TransactionBehavior::IMMEDIATE };
 
@@ -445,7 +453,8 @@ std::optional<std::tuple<std::size_t, std::size_t>> SQLiteStorage::next_vortex(c
 
 		if (!next_vortex.executeStep()) return std::nullopt;
 		const auto vortex_id = next_vortex.getColumn(0).getInt();
-		const auto lattice_size = next_vortex.getColumn(1).getInt();
+		const auto algorithm = next_vortex.getColumn(1).getInt();
+		const auto lattice_size = next_vortex.getColumn(2).getInt();
 
 		SQLite::Statement worker { db, SetVortexActiveWorkerId.data() };
 		worker.bind("@vortex_id", vortex_id);
@@ -454,7 +463,7 @@ std::optional<std::tuple<std::size_t, std::size_t>> SQLiteStorage::next_vortex(c
 		if (worker.exec() != 1) return std::nullopt;
 		transaction.commit();
 
-		return {{ static_cast<std::size_t>(vortex_id), static_cast<std::size_t>(lattice_size) }};
+		return {{ static_cast<std::size_t>(vortex_id), static_cast<algorithms::Algorithm>(algorithm), static_cast<std::size_t>(lattice_size) }};
 	} catch (std::exception & e) {
 		std::cout << "[SQLite] Failed to fetch next vortex. SQLite exception: " << e.what() << std::endl;
 		std::rethrow_exception(std::current_exception());
