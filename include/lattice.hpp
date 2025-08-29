@@ -22,16 +22,16 @@ public:
         return beta;
     }
 
-    void set_beta(const double_t beta) noexcept {
-        this->beta = beta;
+    void set_beta(const double_t pBeta) noexcept {
+        this->beta = pBeta;
     }
 
-    [[nodiscard]] constexpr std::size_t shift_row(std::size_t i, int32_t delta) const noexcept {
+    [[nodiscard]] constexpr std::size_t shift_row(const std::size_t i, const int32_t delta) const noexcept {
         const auto sites = num_sites();
         return (i + sites + delta * length) % sites;
     }
 
-    [[nodiscard]] constexpr std::size_t shift_col(std::size_t i, int32_t delta) const noexcept {
+    [[nodiscard]] constexpr std::size_t shift_col(const std::size_t i, const int32_t delta) const noexcept {
         const auto sites = num_sites();
         const auto row = i % sites / length * length;
         const auto col = (i % length + length + delta) % length;

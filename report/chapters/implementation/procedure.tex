@@ -5,9 +5,9 @@
 	\begin{enumerate}
 		\item The database schema (\Cref{chap:schema}) is initialized by the compute nodes in~\Cref{sec:impl:computing:compute}.
 		\item The compute nodes read the configuration file from the current working directory.
-		\item  \label{procedure_loop} The temperature interval is divided into steps according to~\cref{scanning:init} of~\Cref{sec:impl:scanning}. The resulting configurations are inserted into the database if they do not already exist.
-		\item The program checks whether any existing configuration is incomplete and, if so, executes the task pipeline defined in~\Cref{sec:impl:tasks}.
+		\item \label{procedure_loop} The temperature interval is divided into steps according to~\cref{scanning:init} of~\Cref{sec:impl:scanning}. The resulting configurations are inserted into the database if they do not already exist.
+		\item \label{procedure_pipeline} The program checks whether any existing configuration is incomplete and, if so, executes the task pipeline defined in~\Cref{sec:impl:tasks}.
 		\item One of the compute nodes simulates the annihilation of the vortex/antivortex pair.
 	\end{enumerate}
-
+	Note that~\cref{procedure_loop,procedure_pipeline} can repeat multiple times. This is defined by the scanning depth which will be discussed in the following section.
 
