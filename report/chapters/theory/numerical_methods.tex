@@ -6,7 +6,7 @@
 		\begin{equation}
 			\frac{P(y)}{P(x)} = \exp{(-\beta(H[y] - H[x]))} = \exp{(-\beta \Delta H)}.
 		\end{equation}
-		which follows from \emph{detailed balance}. The condition of \emph{ergodicity} states, that for infinite timescales, all possible configurations must be reached. This procedure generates a Markov chain of dependent configurations that converges to a static distribution. The overall procedure for the lattice is as follows:
+		This follows from \emph{detailed balance}, which is one of the conditions required for this procedure to work. The condition of \emph{ergodicity} states, that for infinite timescales, all possible configurations must be reached. This procedure generates a Markov chain of dependent configurations that converges to a static distribution. The overall procedure for the lattice is as follows:
 		\begin{enumerate}
 			\item Calculate $E$, $M$, and $\Upsilon$ for the initial lattice configuration.
 			\item Perform a lattice sweep by iterating over all lattice sites. For every site $i$ do:
@@ -37,6 +37,8 @@
 	\subsection{Thermalization and Blocking}\label{sec:blocking}
 		To obtain independent and identically distributed (iid) samples, we discard the first $\lceil 3\tau \rceil$ values in a thermalization step. We then perform a blocking step, where we divide the remaining samples into chunks of size $\lceil \tau \rceil$ and calculate the mean over each chunk. All further processing will use these blocked samples, which are now iid.
 		
+		The choice of $\lceil \tau \rceil$ as the blocking stride is based on the lecture notes by~\citet{bootstrap}, but other authors prefer strides of $\lceil 2\tau \rceil$ or $\lceil 3\tau \rceil$. A thorough discussion in \emph{Monte Carlo errors with less errors} by~\citet{monte_carlo_errors} shows that there is an additional factor to the integrated autocorrelation time, which is difficult to account for.
+		
 	\subsection{Critical Slowing Down}\label{sec:theo:critical_slowing_down}
 		Near the critical temperature, the autocorrelation drastically increases, which is due to critical slowing-down effects and the dynamical exponent $z$, which is defined as
 		\begin{equation}
@@ -51,7 +53,7 @@
 		
 		Adjacent to the multi-cluster Swendson and Wang algorithm, the Wollf algorithm exhibits similar improvements in the critical exponent, while utilizing only a single cluster, which makes implementations more straightforward.
 		
-		The key insight is that the Ising spin-flip operation $\sigma_i \rightarrow -\sigma_i$ needs to be generalized to the $U(2)$ symmetry of the XY model. \cite{wolff} defines the spin-flip as the reflection along the hyperplane orthogonal to an arbitrarily chosen unit vector $\vec{r}$
+		The key insight is that the Ising spin-flip operation $\sigma_i \rightarrow -\sigma_i$ needs to be generalized to the $O(2)$ symmetry of the XY model. \cite{wolff} defines the spin-flip as the reflection along the hyperplane orthogonal to an arbitrarily chosen unit vector $\vec{r}$
 		\begin{equation}
 			R(\vec{r}) \sigma_i = \sigma_i - 2 (\sigma_i \cdot \vec{r}) \vec{r} 
 		\end{equation}
