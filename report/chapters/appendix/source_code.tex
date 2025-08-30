@@ -1,5 +1,5 @@
 \chapter{Source Code}\label{chap:source_code}
-	The program requires the installation of an \emph{gcc}\footnote{\url{https://gcc.gnu.org/}} or \emph{Intel\textsuperscript{\tiny\textregistered} oneAPI DPC++/C++ Compiler}\footnote{\url{https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-compiler.html}}, with support for \emph{C++26}. The build process was tested with versions 15.1.1 and 2025.0.4, respectively. The source code for the simulation, as well as the sources for this report, can be obtained from GitHub:
+	The program requires the installation of a \emph{gcc}\footnote{\url{https://gcc.gnu.org/}} or \emph{Intel\textsuperscript{\tiny\textregistered} oneAPI DPC++/C++ Compiler}\footnote{\url{https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-compiler.html}}, with support for \emph{C++26}. The build process was tested with versions 15.1.1 and 2025.0.4, respectively. The source code for the simulation, as well as the sources for this report, can be obtained from GitHub:
 	\begin{center}
 		\url{https://github.com/lennartvrg/physik690-Bachelorarbeit}
 	\end{center}
@@ -14,7 +14,7 @@
 	\begin{minted}[breaklines]{bash}
 		sudo apt-get install meson libpqxx-dev libsimde-dev libboost-all-dev libfftw3-dev libtomlplusplus-dev libflatbuffers-dev libsqlite3-dev libtbb-dev
 	\end{minted}
-	The build process was tested using the versions available in Ubuntu \emph{Ubuntu 25.04} as of \today. Build errors might occur when using older versions. In particular, for \mintinline{bash}{libpqxx-dev} at least version 7.10.x is required.
+	The build process was tested using the versions available in \emph{Ubuntu 25.04} as of \today. Build errors might occur when using older versions. In particular, for \mintinline{bash}{libpqxx-dev} at least version 7.10.x is required.
 	
 	\paragraph{Building}
 	First, create a build directory in the repository root via \mintinline{bash}{mkdir buildDir}. Then, the build files can be generated either for \emph{gcc} via

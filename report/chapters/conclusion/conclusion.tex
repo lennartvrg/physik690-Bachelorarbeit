@@ -1,18 +1,24 @@
 \chapter{Conclusion}
-	In this work, we implemented a program that simulates the XY model using the Metropolis (\cref{sec:theo:metropolis}) and Wolff (\cref{sec:theo:wolff_cluster}) algorithms. The simulation was able to combine the computational resources of a eight node cluster effectively, which is a promising indicator for future runs on bigger clusters.
+	In this work, we implemented a program that simulates the XY model using the Metropolis (\cref{sec:theo:metropolis}) and Wolff (\cref{sec:theo:wolff_cluster}) algorithms. The simulation was able to combine the computational resources of an eight-node cluster effectively, which is a promising indicator for future runs on bigger clusters.
 	
-	We were able to study the per spin observables energy $E$ (\cref{sec:res:energy:observable}), total absolute magnetization $\lvert M^2 \rvert$ (\cref{sec:res:magnet:observable}), specific heat $C_V$ (\cref{sec:res:cv:observable}) and magnetic susceptibility $\chi$ (\cref{sec:res:xs}). Additionally, critical slowing-down effects were observed in~\Cref{sec:res:energy:observable} and, by implementing the Wolff single cluster algorithm, were successfully reduced.
+	We were able to study the per spin observables energy $E$ (\cref{sec:res:energy:observable}), specific heat $C_V$ (\cref{sec:res:cv:observable}), total absolute magnetization $\lvert M^2 \rvert$ (\cref{sec:res:magnet:observable}), and magnetic susceptibility $\chi$ (\cref{sec:res:xs}). Additionally, we observed critical slowing-down effects in~\Cref{sec:res:energy:observable} and, by implementing the Wolff single cluster algorithm, successfully reduced them.
 	
-	In~\Cref{sec:res:temperature}, we used the shifted temperature $T^*$~\citep{shifted} to estimate the critical temperature $T_C$ for the Metropolis algorithm
+	In~\Cref{sec:res:temperature}, we used the shifted temperature $T^*$~\citep{shifted} to estimate the critical temperature $T_C$ for the Metropolis algorithm to:
 	\begin{equation}
-			T_{C, \text{Metropolis}} = \SI{0.888(12)}{\J\per\kb}.
+			T_{C, \text{Metropolis}} = \SI{0.8902(118)}{\J\per\kb}.
 	\end{equation}
-	and then for the Wolff algorithm
+	For the Wolff algorithm, we were also able to account for the choice of $L$ and got the estimate:
 	\begin{equation}
-			T_{C, \text{Wolff}} = \SI{0.8980(14)}{\J\per\kb}.
+			T_{C, \text{Wolff}} = \SI{0.8934(9)}{\J\per\kb}.
 	\end{equation}
-	The errors were obtained from a bootstrap procedure using the standard deviation $\sigma$. As discussed in~\Cref{sec:res:temperature}, our Metropolis estimate is compatible with existing literature values, while the Wolff estimate is only compatible in a $5\sigma$ setting. We further note that the Wolff estimate is more precise by a factor of $\sim 10$.
+	The errors were obtained from a bootstrap procedure using the standard deviation $\sigma$. As discussed in~\Cref{sec:res:temperature}, both of our estimates are compatible with existing literature values, although the Metropolis estimate might only be compatible on account of the large errors. The Wolff algorithm is in particular good agreement with the literature values. The errors obtained using the Wolff algorithm were smaller by a factor of $\approx 10$ than those of the Metropolis algorithm, which indicates the reduced effects of critical slowing-down.
 	
 	In~\Cref{sec:vortex_unbinding}, we observed the existence and annihilation of vortex-antivortex pairs below the critical temperature $T_C$ when using the Metropolis algorithm. For the Wolff algorithm, the vortex-antivortex pairs dissolve too quickly to visualize.
 	
-	At last, in~\Cref{sec:scaling}, we discussed the correlation of computational effort and lattice size. For bigger lattice sizes and more precise estimates of the critical temperature, further simulations should rely solely on the Wolff algorithm, as it gives more accurate estimates in a shorter amount of time. Another approach would be to implement the Metropolis algorithm for GPU clusters, as the algorithm can be easily parallelized.
+	At last, in~\Cref{sec:scaling}, we discussed the correlation of computational effort and lattice size, and we found the total simulation time $T$ to be proportional to $L^2$.
+	
+	\section{Outlook}
+		If we were to continue this project with the intent of finding a better estimate of the critical temperature, we would rely solely on the Wolff algorithm, as it gives more accurate estimates in a shorter amount of time. As the $\chi$ peaks get smaller with increasing lattice sizes, we would increase the temperature scanning depth from $2$ to $3$ or $4$. Combined with more simulated chunks and increased $L$, this should result in better estimates.
+		
+		The further use of the Metropolis algorithm using a CPU approach does not promise better results, as we would need to increase the number of chunks too much to still obtain usable $\chi$ peaks. However, many papers \citep*{literature_gpu} were quite successful in parallelizing the Metropolis on the GPU. A comparison of Wolff on the CPU and Metropolis on the GPU would be an interesting topic of further research.
+		

@@ -1,7 +1,7 @@
 \subsection{Task-based Scheduler}\label{sec:impl:tasks}
 	As each \emph{compute} node has multiple cores, the workload can be distributed across them. These so-called worker threads work on the following tasks until there are no more tasks available.
 	\begin{enumerate}
-		\item In the \emph{simulation} task, the worker thread simulates a configuration, thermalizes and blocks the results, and writes back the iid samples of $E$, $E^2$, $M$, $M^2$, and $\Upsilon$ to the database. Additionally the final spin arrays are also written to the database, which fixes shortcomings~\cref{shortcomings:bootstrap,shortcomings:sweeps}.
+		\item In the \emph{simulation} task, the worker thread simulates a configuration, thermalizes and blocks the results, and writes back the iid samples of $E$, $E^2$, $M$, $M^2$, and $\Upsilon$ to the database. Additionally, the final spin arrays are also written to the database, which fixes shortcomings~\cref{shortcomings:bootstrap,shortcomings:sweeps}.
 		\item In the \emph{bootstrap} task, the worker threads retrieve the iid samples for each configuration that was simulated beforehand. The samples are bootstrapped, and the final results are written to the database.
 		\item In the \emph{derivative} task, the workers calculate the observables ($C_V$, $\chi$) derived from the bootstrapped results.
 	\end{enumerate}

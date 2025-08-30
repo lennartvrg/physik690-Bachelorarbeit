@@ -1,5 +1,5 @@
 \section{Procedure}
-	We propose and implement the following procedure to mitigate aforementioned shortcomings. The various subsystems of the simulation are described in \Cref{sec:impl:scanning,sec:impl:computing,sec:impl:tasks}.
+	We propose and implement the following procedure to mitigate the aforementioned shortcomings. The various subsystems of the simulation are described in \Cref{sec:impl:scanning,sec:impl:computing,sec:impl:tasks}.
 	
 	The high-level procedure is as follows:
 	\begin{enumerate}
@@ -9,5 +9,5 @@
 		\item \label{procedure_pipeline} The program checks whether any existing configuration is incomplete and, if so, executes the task pipeline defined in~\Cref{sec:impl:tasks}.
 		\item One of the compute nodes simulates the annihilation of the vortex/antivortex pair.
 	\end{enumerate}
-	Note that~\cref{procedure_loop,procedure_pipeline} can repeat multiple times. This is defined by the scanning depth which will be discussed in the following section.
+	Note that~\cref{procedure_loop,procedure_pipeline} can repeat multiple times. This is defined by the scanning depth, which will be discussed in the following section.
 

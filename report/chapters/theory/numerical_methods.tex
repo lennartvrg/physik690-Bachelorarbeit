@@ -6,7 +6,7 @@
 		\begin{equation}
 			\frac{P(y)}{P(x)} = \exp{(-\beta(H[y] - H[x]))} = \exp{(-\beta \Delta H)}.
 		\end{equation}
-		This follows from \emph{detailed balance}, which is one of the conditions required for this procedure to work. The condition of \emph{ergodicity} states, that for infinite timescales, all possible configurations must be reached. This procedure generates a Markov chain of dependent configurations that converges to a static distribution. The overall procedure for the lattice is as follows:
+		This follows from \emph{detailed balance}, which is one of the conditions required for this procedure to work. The condition of \emph{ergodicity} states that for infinite timescales, all possible configurations must be reached. This procedure generates a Markov chain of dependent configurations that converges to a static distribution. The overall procedure for the lattice is as follows:
 		\begin{enumerate}
 			\item Calculate $E$, $M$, and $\Upsilon$ for the initial lattice configuration.
 			\item Perform a lattice sweep by iterating over all lattice sites. For every site $i$ do:
@@ -20,7 +20,7 @@
 		\end{enumerate}
 		
 	\subsection{Autocorrelation}
-		The configurations obtained from that procedure are dependent on the configurations preceding them.  To measure this correlation, one can introduce the autocorrelation
+		The configurations obtained from that procedure are dependent on the configurations preceding them.  To measure this correlation, one can introduce the autocorrelation function
 		\begin{equation}
 			C(\Delta t) = \langle(O(t) - \mu_O)(O(t + \Delta t) - \mu_O) \rangle
 		\end{equation}
@@ -44,7 +44,7 @@
 		\begin{equation}
 			\tau \propto \xi^z
 		\end{equation}
-		\cite[eq. (6)]{bootstrap}. Here, $\xi$ is the correlation length, which is a measure of how aligned spins are at a distance.
+		\cite[eq. 6]{bootstrap}. Here, $\xi$ is the correlation length, which is a measure of how aligned spins are at a distance.
 		
 		While the correlation length $\xi$ is inherent to our physical system, the dynamical exponent is a property of the algorithm (e.g., Metropolis-Hastings) used to generate our configurations. It is therefore necessary to use other algorithms if we want to lower the dynamical exponent and thus reduce the critical slowing-down effects.
 		
